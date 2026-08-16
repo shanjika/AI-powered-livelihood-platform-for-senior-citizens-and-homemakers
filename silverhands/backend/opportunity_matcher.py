@@ -35,8 +35,10 @@ def calculate_match_score(user: Dict[str, Any], opportunity: Dict[str, Any]) -> 
     skill_score = min(skill_score, 1.0) * 40.0
 
     # 2. Location Compatibility (20%)
-    u_lat, u_lon = user.get("latitude", 13.0339), user.get("longitude", 80.2696)
-    o_lat, o_lon = opportunity.get("latitude", 13.0320), opportunity.get("longitude", 80.2710)
+    u_lat = user.get("latitude") or 13.0339
+    u_lon = user.get("longitude") or 80.2696
+    o_lat = opportunity.get("latitude") or 13.0320
+    o_lon = opportunity.get("longitude") or 80.2710
     dist = haversine_distance(u_lat, u_lon, o_lat, o_lon)
 
     if dist <= 2.0:

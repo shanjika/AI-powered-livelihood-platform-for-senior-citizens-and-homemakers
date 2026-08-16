@@ -326,8 +326,14 @@ def get_opportunities(category: Optional[str] = None):
 @app.get("/api/opportunities/match/{user_id}")
 def match_opportunities(user_id: str):
     user = get_user(user_id)
-    if not user.get("skills"):
+    skills = user.get("skills") or []
+    if not skills:
         return []
+
+    primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0)) if skills else None
+    skill_name = primary_skill.get("name") if primary_skill else ""
+    user_name = user.get("name", "Community Member")
+    location = user.get("location_name") or user.get("district") or "Chennai"
 
     conn = get_db()
     cursor = conn.cursor()
@@ -338,20 +344,35 @@ def match_opportunities(user_id: str):
     matched = []
     for opp in opps:
         score = calculate_match_score(user, opp)
-        if score <= 0:
-            continue
-        opp["match_score"] = score
-        u_lat, u_lon = user.get("latitude", 13.0339), user.get("longitude", 80.2696)
-        o_lat, o_lon = opp.get("latitude", 13.0320), opp.get("longitude", 80.2710)
-        opp["distance_km"] = haversine_distance(u_lat, u_lon, o_lat, o_lon)
-        matched.append(opp)
+        if score > 0:
+            opp["match_score"] = score
+            u_lat = user.get("latitude") or 13.0339
+            u_lon = user.get("longitude") or 80.2696
+            o_lat = opp.get("latitude") or 13.0320
+            o_lon = opp.get("longitude") or 80.2710
+            opp["distance_km"] = haversine_distance(u_lat, u_lon, o_lat, o_lon)
+            matched.append(opp)
 
-    matched.sort(key=lambda x: x["match_score"], reverse=True)
+    # Generate AI-tailored opportunities if DB doesn't contain matching jobs for custom skill
+    if not matched and skill_name:
+        matched = ai_service.generate_skill_opportunities(user_name, skill_name, location)
+
+    matched.sort(key=lambda x: x.get("match_score", 0), reverse=True)
     return matched
 
 # Collaboration Engine
 @app.get("/api/collaborations")
-def get_collaborations():
+def get_collaborations(user_id: Optional[str] = Query(None)):
+    if user_id:
+        user = get_user(user_id)
+        skills = user.get("skills") or []
+        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0)) if skills else None
+        if primary_skill and primary_skill.get("name"):
+            skill_name = primary_skill.get("name")
+            user_name = user.get("name", "Community Member")
+            location = user.get("location_name") or user.get("district") or "Chennai"
+            return ai_service.generate_skill_collaborations(user_name, skill_name, location)
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM collaborations")

@@ -9,14 +9,24 @@ import json
 import math
 import os
 from typing import Dict, List, Any, Optional
-from seed_data import (
-    INITIAL_USERS,
-    INITIAL_OPPORTUNITIES,
-    INITIAL_COLLABORATIONS,
-    INITIAL_CLASSES,
-    INITIAL_VIDEOS,
-    INITIAL_EARNINGS
-)
+try:
+    from .seed_data import (
+        INITIAL_USERS,
+        INITIAL_OPPORTUNITIES,
+        INITIAL_COLLABORATIONS,
+        INITIAL_CLASSES,
+        INITIAL_VIDEOS,
+        INITIAL_EARNINGS
+    )
+except ImportError:
+    from seed_data import (
+        INITIAL_USERS,
+        INITIAL_OPPORTUNITIES,
+        INITIAL_COLLABORATIONS,
+        INITIAL_CLASSES,
+        INITIAL_VIDEOS,
+        INITIAL_EARNINGS
+    )
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "silverhands.db")
 

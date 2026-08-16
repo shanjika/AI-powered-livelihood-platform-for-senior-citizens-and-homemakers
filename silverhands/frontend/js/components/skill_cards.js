@@ -102,22 +102,32 @@ window.SkillCardsComponent = {
       return;
     }
 
+    window.app.showLoading("Saving your skill profile & generating AI dashboard...");
+
     if (window.app.userProfile && window.app.userProfile.id) {
       try {
-        const res = await fetch("/api/skills/save", {
+        await fetch("/api/skills/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: window.app.userProfile.id, skills: selected })
         });
-        if (!res.ok) {
-          console.warn("Skill save failed, continuing with local state only.");
-        }
       } catch (e) {
         console.warn("Could not persist selected skills:", e);
       }
     }
 
-    window.app.userProfile.skills = selected;
+    if (window.app.userProfile) {
+      window.app.userProfile.skills = selected;
+    }
+
+    if (window.RadarComponent) {
+      await window.RadarComponent.loadOpportunities();
+    }
+    if (window.CollaborationComponent) {
+      await window.CollaborationComponent.loadCollaborations();
+    }
+
+    window.app.hideLoading();
     window.app.navigate("dashboard");
   }
 };

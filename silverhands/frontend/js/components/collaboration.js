@@ -9,7 +9,8 @@ window.CollaborationComponent = {
 
   async loadCollaborations() {
     try {
-      const res = await fetch("/api/collaborations");
+      const userId = window.app.userProfile ? window.app.userProfile.id : "";
+      const res = await fetch(`/api/collaborations${userId ? '?user_id=' + userId : ''}`);
       this.activeCollaborations = await res.json();
     } catch (e) {
       console.warn("Error fetching collaborations:", e);

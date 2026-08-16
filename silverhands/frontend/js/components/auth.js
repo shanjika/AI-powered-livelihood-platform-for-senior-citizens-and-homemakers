@@ -141,7 +141,6 @@ window.AuthComponent = {
     window.app.showLoading(this.isSignUpMode ? "Registering account & saving profile..." : "Authenticating email...");
 
     try {
-      let res, data;
       if (this.isSignUpMode) {
         const name = document.getElementById("auth-name").value.trim();
         const age = document.getElementById("auth-age").value.trim();
@@ -151,46 +150,57 @@ window.AuthComponent = {
         const state = document.getElementById("auth-state").value.trim();
         const education = document.getElementById("auth-education").value.trim();
 
-        res = await fetch("/api/auth/signup", {
+        const res = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password, name, age: age ? Number(age) : null, phone, district, taluk, state, education, language: window.i18n.currentLang })
         });
+        const data = await res.json();
+        window.app.hideLoading();
+
+        if (res.ok && data.user) {
+          alert(`✅ Registration Successful for ${data.user.name}!\n\nYour profile has been saved to the database. Please log in with your email and password to proceed.`);
+          this.isSignUpMode = false;
+          window.app.render();
+          setTimeout(() => {
+            const emailInput = document.getElementById("auth-email");
+            if (emailInput) emailInput.value = email;
+          }, 50);
+        } else {
+          alert(data.detail || "Registration failed.");
+        }
       } else {
-        res = await fetch("/api/auth/login", {
+        const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password })
         });
-      }
+        const data = await res.json();
+        window.app.hideLoading();
 
-      data = await res.json();
-      window.app.hideLoading();
+        if (res.ok && data.user) {
+          window.app.userProfile = data.user;
+          localStorage.setItem("silverhands_user_id", data.user.id);
+          localStorage.setItem("silverhands_email", email);
 
-      if (res.ok && data.user) {
-        window.app.userProfile = data.user;
-        localStorage.setItem("silverhands_user_id", data.user.id);
-        localStorage.setItem("silverhands_email", email);
-        if (window.RadarComponent) {
-          await window.RadarComponent.loadOpportunities();
-        }
-        alert(`Welcome ${data.user.name}! Let’s set up your skill profile.`);
-        if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
-          window.SkillCardsComponent.clearExtractedSkills();
-        }
-        if (Array.isArray(data.user.skills) && data.user.skills.length > 0) {
-          window.app.navigate("dashboard");
+          if (window.RadarComponent) {
+            await window.RadarComponent.loadOpportunities();
+          }
+
+          if (Array.isArray(data.user.skills) && data.user.skills.length > 0) {
+            window.app.navigate("dashboard");
+          } else {
+            alert(`👋 Welcome ${data.user.name}! Please enter your #1 best skill to set up your personalized AI dashboard.`);
+            window.OnboardingComponent.step = 3;
+            window.app.navigate("onboarding");
+          }
         } else {
-          window.OnboardingComponent.step = 3;
-          window.OnboardingComponent.startInterview();
-          window.app.navigate("onboarding");
+          alert(data.detail || "Authentication failed. Please check your credentials.");
         }
-      } else {
-        alert(data.detail || "Authentication failed.");
       }
     } catch (e) {
       window.app.hideLoading();
-      alert("Network error during login.");
+      alert("Network error during operation. Please try again.");
     }
   }
 };

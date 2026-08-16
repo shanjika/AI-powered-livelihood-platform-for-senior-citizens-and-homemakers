@@ -17,13 +17,27 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 
+def _is_valid_api_key(key: Optional[str]) -> bool:
+    """Validates if key exists and is not a default placeholder string."""
+    if not key or not isinstance(key, str):
+        return False
+    k = key.strip().lower()
+    if not k:
+        return False
+    placeholders = ["your_gemini_api_key", "your_openai_api_key", "your_api_key", "your_key", "placeholder", "xxx"]
+    if any(p in k for p in placeholders) or k.startswith("your_") or k.endswith("_here"):
+        return False
+    if len(k) < 15:
+        return False
+    return True
+
 def _load_dotenv():
     """Built-in zero-dependency .env loader."""
     paths = [
-        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
         os.path.join(os.path.dirname(__file__), "..", ".env"),
         os.path.join(os.path.dirname(__file__), ".env"),
         os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
     ]
     for path in paths:
         if os.path.exists(path):
@@ -36,8 +50,10 @@ def _load_dotenv():
                         k, v = line.split("=", 1)
                         k = k.strip()
                         v = v.strip().strip("'\"")
-                        if k and not os.environ.get(k):
-                            os.environ[k] = v
+                        if k:
+                            curr = os.environ.get(k)
+                            if not curr or not _is_valid_api_key(curr):
+                                os.environ[k] = v
             except Exception:
                 pass
 
@@ -56,7 +72,7 @@ class AIEngine:
         openai_key = os.getenv("OPENAI_API_KEY")
         llm_key = os.getenv("LLM_API_KEY")
 
-        if gemini_key:
+        if _is_valid_api_key(gemini_key):
             try:
                 from google import genai
                 self.genai_client = genai.Client(api_key=gemini_key)
@@ -65,12 +81,16 @@ class AIEngine:
             except Exception:
                 self.use_real_ai = True
                 self.provider = "gemini_rest"
-        elif openai_key:
+        elif _is_valid_api_key(openai_key):
             self.use_real_ai = True
             self.provider = "openai_rest"
-        elif llm_key:
+        elif _is_valid_api_key(llm_key):
             self.use_real_ai = True
             self.provider = "generic_llm"
+        else:
+            self.use_real_ai = False
+            self.provider = "dynamic_nlp"
+            self.genai_client = None
 
     def _call_llm_api(self, prompt: str, system_prompt: str = "", json_mode: bool = True) -> Optional[Any]:
         """Calls available AI Model API (Gemini or OpenAI) with JSON or text response."""
@@ -93,38 +113,44 @@ class AIEngine:
 
         # 1. Gemini SDK
         if self.provider == "gemini_sdk" and self.genai_client:
-            try:
-                config = {'response_mime_type': 'application/json'} if json_mode else {}
-                full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-                res = self.genai_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=full_prompt,
-                    config=config
-                )
-                text = _clean_json_str(res.text)
-                return json.loads(text) if json_mode else text
-            except Exception as e:
-                print(f"SilverHands AI Engine Gemini SDK Error: {e}")
+            for model_name in ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-flash-latest']:
+                try:
+                    config = {'response_mime_type': 'application/json'} if json_mode else {}
+                    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                    res = self.genai_client.models.generate_content(
+                        model=model_name,
+                        contents=full_prompt,
+                        config=config
+                    )
+                    text = _clean_json_str(res.text)
+                    return json.loads(text) if json_mode else text
+                except Exception as e:
+                    if "NOT_FOUND" in str(e):
+                        continue
+                    print(f"SilverHands AI Engine Gemini SDK Error ({model_name}): {e}")
 
         # 2. Gemini REST API Fallback
         if (self.provider in ["gemini_rest", "gemini_sdk"]) and gemini_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": f"{system_prompt}\n\n{prompt}" if system_prompt else prompt}]}]
-                }
-                if json_mode:
-                    payload["generationConfig"] = {"responseMimeType": "application/json"}
+            for model_name in ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-flash-latest']:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": f"{system_prompt}\n\n{prompt}" if system_prompt else prompt}]}]
+                    }
+                    if json_mode:
+                        payload["generationConfig"] = {"responseMimeType": "application/json"}
 
-                data = json.dumps(payload).encode('utf-8')
-                req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    resp_body = response.read().decode('utf-8')
-                    result = json.loads(resp_body)
-                    text = _clean_json_str(result['candidates'][0]['content']['parts'][0]['text'])
-                    return json.loads(text) if json_mode else text
-            except Exception as e:
-                print(f"SilverHands AI Engine Gemini REST Error: {e}")
+                    data = json.dumps(payload).encode('utf-8')
+                    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+                    with urllib.request.urlopen(req, timeout=12) as response:
+                        resp_body = response.read().decode('utf-8')
+                        result = json.loads(resp_body)
+                        text = _clean_json_str(result['candidates'][0]['content']['parts'][0]['text'])
+                        return json.loads(text) if json_mode else text
+                except Exception as e:
+                    if "404" in str(e):
+                        continue
+                    print(f"SilverHands AI Engine Gemini REST Error ({model_name}): {e}")
 
         # 3. OpenAI REST API Fallback
         if self.provider == "openai_rest" and openai_key:
@@ -157,99 +183,274 @@ class AIEngine:
         return None
 
     def onboarding_chat(self, step: int, user_input: str, history: List[Dict[str, str]], lang: str = "ta") -> Dict[str, Any]:
-        """Adaptive Onboarding Interview handler dynamically derived from user's actual conversation."""
-        if self.use_real_ai:
-            sys_p = f"You are SilverHands AI Interviewer speaking in language '{lang}'. Guide senior citizens and homemakers warmly to share their lifetime skills."
+        """Adaptive Onboarding Interview handler dynamically derived from user's actual conversation with interactive skill options."""
+        skill_options_by_lang = {
+            "en": [
+                "🍳 Traditional Cooking & Baking",
+                "🧵 Tailoring & Embroidery",
+                "📚 Academic & Vedic Tutoring",
+                "🌿 Organic Gardening",
+                "🎨 Traditional Handicrafts & Art",
+                "👵 Elder Care & Companionship",
+                "🛠️ Home Maintenance & Repair",
+                "🎵 Music & Vocal Mentoring",
+                "💼 Accounts & Tax Advisory",
+                "✍️ Translation & Content Writing"
+            ],
+            "ta": [
+                "🍳 பாரம்பரிய சமையல் & பலகாரங்கள்",
+                "🧵 தையல், எம்பிராய்டரி & பிளவுஸ் டிசைனிங்",
+                "📚 பள்ளிப் பாடம் & வேத கற்பித்தல்",
+                "🌿 இயற்கை தோட்டம் & மாடித் தோட்டம்",
+                "🎨 பாரம்பரிய கைவினைப்பொருட்கள் & கோலம்",
+                "👵 முதியோர் பராமரிப்பு & தோழமை",
+                "🛠️ வீட்டு பராமரிப்பு & பழுதுபார்த்தல்",
+                "🎵 கர்நாடக இசை & பாட்டு பயிற்சி",
+                "💼 வரவு-செலவு கணக்கு & வரி ஆலோசனை",
+                "✍️ மொழிபெயர்ப்பு & கட்டுரை எழுதுதல்"
+            ],
+            "hi": [
+                "🍳 पारंपरिक खान-पान और व्यंजन",
+                "🧵 सिलाई, कढ़ाई और बुटीक डिजाइनिंग",
+                "📚 ट्यूशन और बच्चों की पढ़ाई",
+                "🌿 जैविक बागवानी और पौधे",
+                "🎨 पारंपरिक हस्तशिल्प और कला",
+                "👵 वरिष्ठ नागरिकों की देखभाल",
+                "🛠️ घरेलू मरम्मत और सेवाएं",
+                "🎵 संगीत और भजन गायन",
+                "💼 हिसाब-किताब और टैक्स सलाह",
+                "✍️ भाषा अनुवाद और लेखन"
+            ],
+            "te": [
+                "🍳 సాంప్రదాయ వంటలు & పిండివంటలు",
+                "🧵 కుట్టుపని, ఎంబ్రాయిడరీ & డిజైనింగ్",
+                "📚 పాఠాలు & ట్యూషన్ బోధన",
+                "🌿 సేంద్రీయ తోటపని & మొక్కల పెంపకం",
+                "🎨 సాంప్రదాయ హస్తకళలు & ఆర్ట్",
+                "👵 వృద్ధుల సంరక్షణ & సహాయం",
+                "🛠️ గృహ మరమ్మతులు & నిర్వహణ",
+                "🎵 సంగీతం & గాత్ర సాధన",
+                "💼 అకౌంట్స్ & ఫైనాన్షియల్ సలహాలు",
+                "✍️ అనువాదం & కంటెంట్ రచన"
+            ],
+            "kn": [
+                "🍳 ಸಾಂಪ್ರದಾಯಿಕ ಅಡುಗೆ & ತಿಂಡಿಗಳು",
+                "🧵 ಟೈಲರಿಂಗ್, ಕಸೂತಿ & ಉಡುಪು ವಿನ್ಯಾಸ",
+                "📚 ಪಾಠ ಪ್ರವಚನ & ಟ್ಯೂಷನ್",
+                "🌿 ಸಾವಯವ ಕೈತೋಟ & ಕೃಷಿ",
+                "🎨 ಸಾಂಪ್ರದಾಯಿಕ ಕರಕುಶಲ ಕಲೆ",
+                "👵 ಹಿರಿಯರ ಆರೈಕೆ & ಸೇವೆ",
+                "🛠️ ಮನೆ ದುರಸ್ತಿ & ನಿರ್ವಹಣೆ",
+                "🎵 ಸಂಗೀತ & ಹಾಡುಗಾರಿಕೆ",
+                "💼 ಲೆಕ್ಕಪತ್ರ & ತೆರಿಗೆ ಸಲಹೆ",
+                "✍️ ಭಾಷಾಂತರ & ಬರಹ"
+            ],
+            "ml": [
+                "🍳 പരമ്പരാഗത പാചകം & പലഹാരങ്ങൾ",
+                "🧵 തയ്യൽ & എംബ്രോയിഡറി ഡിസൈനിംഗ്",
+                "📚 ട്യൂഷൻ & കുട്ടികളെ പഠിപ്പിക്കൽ",
+                "🌿 ജൈവ പച്ചക്കറി കൃഷി & തോട്ടം",
+                "🎨 പരമ്പരാഗത കരകൗശല നിർമ്മാണം",
+                "👵 മുതിർന്നവരുടെ പരിചരണം",
+                "🛠️ വീട്ടുപകരണ അറ്റകുറ്റപ്പണികൾ",
+                "🎵 സംഗീത അധ്യാപനം",
+                "💼 അക്കൗണ്ടിംഗ് & ഉപദേശം",
+                "✍️ വിവർത്തനം & എഴുത്ത്"
+            ]
+        }
+
+        preference_options_by_lang = {
+            "en": [
+                "🏡 Home-based Orders & Deliveries",
+                "🎓 Conduct Workshops & Masterclasses",
+                "📍 Local Neighborhood Services",
+                "🌟 5+ Years Practical Experience",
+                "🏆 10+ Years Master Experience",
+                "🚀 Confirm & Discover Opportunities"
+            ],
+            "ta": [
+                "🏡 வீட்டிலிருந்தே ஆர்டர்கள் & விநியோகம்",
+                "🎓 வகுப்புகள் & பயிற்சிப் பட்டறைகள்",
+                "📍 அருகில் உள்ள உள்ளூர் பணிகள்",
+                "🌟 5+ ஆண்டுகள் நடைமுறை அனுபவம்",
+                "🏆 10+ ஆண்டுகள் நிபுணர் அனுபவம்",
+                "🚀 உறுதி செய்து வாய்ப்புகளைப் பார்க்கவும்"
+            ],
+            "hi": [
+                "🏡 घर बैठे आर्डर और काम",
+                "🎓 ऑनलाइन या ऑफलाइन क्लास सिखाना",
+                "📍 नजदीकी स्थानीय सेवाएं",
+                "🌟 5+ साल का अनुभव",
+                "🏆 10+ साल का विशेषज्ञ अनुभव",
+                "🚀 कौशल की पुष्टि करें और अवसर खोजें"
+            ],
+            "te": [
+                "🏡 ఇంటి వద్ద నుంచే ఆర్డర్లు & డెలివరీ",
+                "🎓 వర్క్‌షాప్‌లు & క్లాసులు నిర్వహణ",
+                "📍 స్థానిక ఆర్డర్లు & పనులు",
+                "🌟 5+ సంవత్సరాల అనుభవం",
+                "🏆 10+ సంవత్సరాల నిపుణత",
+                "🚀 నిర్ధారించి అవకాశాలను కనుగొనండి"
+            ],
+            "kn": [
+                "🏡 ಮನೆಯಿಂದಲೇ ಸೇವೆಗಳು & ಸರಬರಾಜು",
+                "🎓 ತರಗತಿಗಳು & ಕಾರ್ಯಾಗಾರಗಳು",
+                "📍 ಸ್ಥಳೀಯ ಆರ್ಡರ್‌ಗಳು & ಕೆಲಸಗಳು",
+                "🌟 5+ ವರ್ಷಗಳ ಅನುಭವ",
+                "🏆 10+ ವರ್ಷಗಳ ಪರಿಣತಿ",
+                "🚀 ದೃಢೀಕರಿಸಿ ಮತ್ತು ಅವಕಾಶಗಳನ್ನು ನೋಡಿ"
+            ],
+            "ml": [
+                "🏡 വീട്ടിലിരുന്ന് ചെയ്യാവുന്ന ഓർഡറുകൾ",
+                "🎓 ക്ലാസുകളും വർക്ക്‌ഷോപ്പുകളും",
+                "📍 പ്രാദേശിക സേവനങ്ങളും ജോലികളും",
+                "🌟 5+ വർഷത്തെ പ്രവൃത്തിപരിചയം",
+                "🏆 10+ വർഷത്തെ വൈദഗ്ധ്യം",
+                "🚀 സ്ഥിരീകരിച്ച് അവസരങ്ങൾ കണ്ടെത്തുക"
+            ]
+        }
+
+        welcome_prompts = {
+            "en": "Welcome to SilverHands! What are your preferred skills and lifetime experiences that you would like to earn from? Choose from the popular options below, or type/speak freely.",
+            "ta": "SilverHands தளத்திற்கு அன்புடன் வரவேற்கிறோம்! நீங்கள் வருமானம் ஈட்ட விரும்பும் உங்களின் விருப்பமான திறமைகள் என்ன? கீழே உள்ள விருப்பங்களைத் தேர்ந்தெடுக்கவும் அல்லது நேரடியாக தட்டச்சு செய்யவும்.",
+            "hi": "SilverHands में आपका हार्दिक स्वागत है! आप किन पसंदीदा कौशलों से कमाई करना चाहते हैं? नीचे दिए गए विकल्पों में से चुनें या बोलकर/लिखकर बताएं।",
+            "te": "SilverHands కు స్వాగతం! మీరు ఆదాయం పొందాలనుకుంటున్న మీ నైపుణ్యాలు ఏమిటి? క్రింది ఎంపికల నుండి ఎంచుకోండి లేదా టైప్/మాట్లాడండి.",
+            "kn": "SilverHands ಗೆ ಸ್ವಾಗತ! ನೀವು ಆದಾಯ ಗಳಿಸಲು ಬಯಸುವ ನಿಮ್ಮ ಪ್ರಮುಖ ಕೌಶಲ್ಯಗಳು ಯಾವುವು? ಕೆಳಗಿನ ಆಯ್ಕೆಗಳಿಂದ ಆರಿಸಿ ಅಥವಾ ಬರೆಯಿರಿ.",
+            "ml": "SilverHands-ലേക്ക് സ്വാഗതം! നിങ്ങൾക്ക് വരുമാനം കണ്ടെത്താൻ താല്പര്യമുള്ള പ്രധാന കഴിവുകൾ ഏതെല്ലാമാണ്? താഴെ കൊടുത്തിരിക്കുന്നവയിൽ നിന്ന് തിരഞ്ഞെടുക്കുക അല്ലെങ്കിൽ എഴുതുക."
+        }
+
+        followup_prompts = {
+            "en": "Wonderful! We've noted your skill preference. How do you prefer to offer your services, and how many years of experience do you have?",
+            "ta": "அற்புதம்! உங்கள் திறமை விருப்பத்தை பதிவு செய்துவிட்டோம். நீங்கள் இந்த பணியை வீட்டிலிருந்தா அல்லது வெளியில் சென்று செய்ய விரும்புகிறீர்களா? உங்களுக்கு எத்தனை வருட அனுபவம் உள்ளது?",
+            "hi": "बहुत बढ़िया! हमने आपकी पसंद दर्ज कर ली है। आप यह कार्य कैसे करना चाहते हैं (घर से या पास में), और आपका कितने वर्षों का अनुभव है?",
+            "te": "చాలా బాగుంది! మీ నైపుణ్యం నమోదైంది. మీరు ఇంటి వద్ద నుండి పని చేయాలనుకుంటున్నారా లేదా బయటకు వెళ్లి చేయాలనుకుంటున్నారా? మీకు ఎంత అనుభవం ఉంది?",
+            "kn": "ಅತ್ಯುತ್ತಮ! ನಿಮ್ಮ ಕೌಶಲ್ಯವನ್ನು ದಾಖಲಿಸಲಾಗಿದೆ. ನೀವು ಮನೆಯಿಂದ ಕೆಲಸ ಮಾಡಲು ಬಯಸುತ್ತೀರಾ ಅಥವಾ ಹೊರಗೆ ಹೋಗಿ ಮಾಡಲು ಬಯಸುತ್ತೀರಾ? ಎಷ್ಟು ವರ್ಷದ ಅನುಭವವಿದೆ?",
+            "ml": "വളരെ നല്ലത്! നിങ്ങളുടെ കഴിവ് രേഖപ്പെടുത്തി. വീട്ടിലിരുന്ന് ജോലി ചെയ്യാനാണോ അതോ പുറത്തുപോയി ചെയ്യാനാണോ താല്പര്യം? എത്ര വർഷത്തെ പരിചയമുണ്ട്?"
+        }
+
+        closing_prompts = {
+            "en": "Great! SilverHands AI has analyzed your skills and preferences. Let's confirm your skill profile and explore matching opportunities!",
+            "ta": "மிக்க மகிழ்ச்சி! உங்கள் திறமைகள் மற்றும் விருப்பங்களை AI வெற்றிகரமாக பகுப்பாய்வு செய்துள்ளது. உங்கள் Dashboard-ஐ திறந்து வாய்ப்புகளைப் பார்ப்போம்!",
+            "hi": "शानदार! AI ने आपके कौशल और प्राथमिकताओं का विश्लेषण कर लिया है। आइए आपकी प्रोफ़ाइल की पुष्टि करके नए अवसर देखें!",
+            "te": "అద్భుతం! AI మీ నైపుణ్యాలను విశ్లేషించింది. మీ ప్రొఫైల్ నిర్ధారించి అవకాశాలను చూద్దాం!",
+            "kn": "ಅದ್ಭುತ! AI ನಿಮ್ಮ ಕೌಶಲ್ಯಗಳನ್ನು ವಿಶ್ಲೇಷಿಸಿದೆ. ನಿಮ್ಮ ಪ್ರೊಫೈಲ್ ದೃಢೀಕರಿಸಿ ಅವಕಾಶಗಳನ್ನು ನೋಡೋಣ!",
+            "ml": "മികച്ചത്! AI നിങ്ങളുടെ കഴിവുകൾ വിശകലനം ചെയ്തു. നിങ്ങളുടെ പ്രൊഫൈൽ സ്ഥിരീകരിച്ച് അവസരങ്ങൾ കാണാം!"
+        }
+
+        user_skills_options = skill_options_by_lang.get(lang, skill_options_by_lang["en"])
+        user_pref_options = preference_options_by_lang.get(lang, preference_options_by_lang["en"])
+        clean_input = user_input.strip().lower()
+
+        # Real AI prompt with structured JSON output if API key is active
+        if self.use_real_ai and clean_input:
+            sys_p = f"You are SilverHands AI Career & Skill Interviewer speaking in language '{lang}'. Guide senior citizens warmly with interactive options."
             user_p = f"""
             Interview Step: {step}
-            User's latest response: "{user_input}"
-            Previous transcript history: {json.dumps(history)}
+            User Input: "{user_input}"
+            Transcript History: {json.dumps(history)}
 
-            Respond with JSON:
+            Return JSON:
             {{
-                "question": "Warm, encouraging follow-up question strictly in language '{lang}'",
+                "question": "Warm conversational guidance strictly in language '{lang}'",
+                "options": ["Option 1 in '{lang}'", "Option 2 in '{lang}'", "Option 3 in '{lang}'", "Option 4 in '{lang}'"],
                 "next_step": {step + 1},
-                "is_complete": false
+                "is_complete": false,
+                "ready_to_extract": true
             }}
-            Set is_complete to true if step >= 4 or if user gave sufficient details about their background.
             """
             llm_res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
-            if llm_res and "question" in llm_res:
+            if llm_res and "question" in llm_res and isinstance(llm_res.get("options"), list) and len(llm_res["options"]) > 0:
                 return llm_res
 
-        # Dynamic Fallback Interviewer
-        text_lower = user_input.lower()
-        
-        # Check language translations
-        lang_prompts = {
-            "ta": {
-                "welcome": "வணக்கம்! SilverHands தளத்திற்கு உங்களை வரவேற்கிறோம். உங்கள் பெயர் மற்றும் நீங்கள் எந்த ஊரில் வசிக்கிறீர்கள் என்று கூறுங்கள்?",
-                "ask_skills": "மிக்க மகிழ்ச்சி! உங்களின் வாழ்நாள் அனுபவங்கள், சமையல், தையல், கற்பித்தல், தோட்டம் அல்லது கைவினை போன்ற திறமைகளைப் பற்றி விரிவாகக் கூற முடியுமா?",
-                "ask_pref": "அற்புதம்! நீங்கள் இந்த பணிகளை வீட்டிலிருந்தே செய்ய விரும்புகிறீர்களா அல்லது அருகில் உள்ள இடங்களுக்குச் சென்று செய்ய விரும்புகிறீர்களா? உங்களுக்கு வாரத்தில் எந்த நாட்கள் வசதி?",
-                "closing": "மிக்க நன்றி! உங்கள் திறமைகளை AI முறையில் பகுப்பாய்வு செய்து உங்களின் தனிப்பட்ட Dashboard-ஐ உருவாக்குகிறது."
-            },
-            "hi": {
-                "welcome": "नमस्ते! SilverHands में आपका स्वागत है। कृपया अपना नाम और अपने शहर का नाम बताएं?",
-                "ask_skills": "बहुत बढ़िया! कृपया अपने अनुभव, जैसे खाना बनाना, सिलाई, पढ़ाना, बागबानी या अन्य कलात्मक कौशल के बारे में बताएं?",
-                "ask_pref": "शानदार! क्या आप यह काम घर से करना चाहते हैं या पास की जगह पर? सप्ताह में कौन से दिन आपके लिए सुविधाजनक हैं?",
-                "closing": "धन्यवाद! AI आपके कौशल का विश्लेषण करके आपका डैशबोर्ड तैयार कर रहा है।"
-            },
-            "en": {
-                "welcome": "Welcome to SilverHands! What is your full name and which city or area do you reside in?",
-                "ask_skills": "Wonderful! Could you share your lifetime experience and skills in cooking, tailoring, tutoring, gardening, crafts, or services?",
-                "ask_pref": "Great! Do you prefer working from home or local nearby projects? What days and hours are comfortable for you?",
-                "closing": "Thank you! SilverHands AI is now extracting your skills and creating your personalized earning dashboard."
-            }
-        }
-        
-        lp = lang_prompts.get(lang, lang_prompts["en"])
+        # Determine step flow intelligently based on input
+        is_greeting = not clean_input or any(g in clean_input for g in ["hi", "hello", "hey", "வணக்கம்", "नमस्ते", "నమస్తే", "ನಮಸ್ಕಾರ", "നമസ്കാരം", "start", "begin"])
+        is_confirmation = any(c in clean_input for c in ["confirm", "dashboard", "opportunities", "உறுதி", "வாய்ப்பு", "पुष्टि", "अवसर", "నిర్ధారించు", "ದೃಢೀಕರಿಸಿ", "സ്ഥിരീകരിക്കുക", "ready", "done"])
 
-        if step == 1 or not user_input.strip():
-            return {"question": "What is the skill you know best and can confidently do for work or income? Tell me only one or two skills, such as cooking, tailoring, tutoring, gardening, or handicrafts.", "next_step": 2, "is_complete": False}
-        elif step == 2:
-            return {"question": "Please tell me the exact skill or work you do best, and I will identify it for your dashboard.", "next_step": 3, "is_complete": False}
-        elif step == 3:
-            return {"question": "Thank you. I will extract your skill, confirm it, and create your personal dashboard based only on that skill.", "next_step": 4, "is_complete": True}
+        if step == 1 or is_greeting:
+            return {
+                "question": welcome_prompts.get(lang, welcome_prompts["en"]),
+                "options": user_skills_options,
+                "next_step": 2,
+                "is_complete": False,
+                "ready_to_extract": False
+            }
+        elif is_confirmation or step >= 3:
+            return {
+                "question": closing_prompts.get(lang, closing_prompts["en"]),
+                "options": [user_pref_options[-1]],
+                "next_step": 4,
+                "is_complete": True,
+                "ready_to_extract": True
+            }
         else:
-            return {"question": lp["closing"], "next_step": 5, "is_complete": True}
+            return {
+                "question": followup_prompts.get(lang, followup_prompts["en"]),
+                "options": user_pref_options,
+                "next_step": 3,
+                "is_complete": False,
+                "ready_to_extract": True
+            }
 
     def extract_skills(self, user_text: str, history: List[Dict[str, str]], lang: str = "ta") -> List[Dict[str, Any]]:
         """Extract explicit, hidden, and transferable skills dynamically strictly based on user input only."""
         user_messages = [m.get("text", "") for m in history if str(m.get("role", "")).lower() == "user"]
-        full_transcript = (user_text + " " + " ".join(user_messages)).strip()
+        raw_combined = (user_text + " " + " ".join(user_messages)).strip()
+
+        # Strip interviewer assistant question prompts to avoid treating prompt text as a user skill
+        prompts_to_strip = [
+            r"what is the skill you know best.*?\?",
+            r"tell me only one or two skills.*?\.",
+            r"please tell me the exact skill.*?\.",
+            r"such as cooking, tailoring, tutoring, gardening, or handicrafts\.?",
+            r"and i will identify it for your dashboard\.?",
+            r"tell us the skill\(s\) you know best.*"
+        ]
+        cleaned_transcript = raw_combined
+        for p in prompts_to_strip:
+            cleaned_transcript = re.sub(p, " ", cleaned_transcript, flags=re.IGNORECASE)
+        cleaned_transcript = re.sub(r'\s+', ' ', cleaned_transcript).strip()
+        if not cleaned_transcript:
+            cleaned_transcript = user_text.strip()
         
-        if self.use_real_ai and full_transcript:
+        if self.use_real_ai and cleaned_transcript:
             sys_p = "You are SilverHands Skill Extraction Engine. Extract only the skills explicitly mentioned by the user. Ignore assistant prompts and examples."
             user_p = f"""
-            Analyze transcript: "{full_transcript}"
+            Analyze user statement: "{cleaned_transcript}"
             User Language: {lang}
 
-            Return a JSON list with only the skills the user actually mentioned, not examples or prompt text.
-            Keep it to 1-3 items total and prefer the exact user skill(s) only.
+            Return a JSON list with only the skill(s) the user actually mentioned.
+            Do NOT include assistant questions or generic phrases.
             [
               {{
                 "id": "unique-id",
-                "name": "Skill Name",
-                "category": "Cooking|Tailoring|Teaching|Gardening|Handicrafts|Services|Professional",
+                "name": "Exact Skill Name (e.g. Traditional Cooking / Custom Tailoring / Math Tutoring)",
+                "category": "Cooking|Tailoring|Teaching|Gardening|Handicrafts|Services|Professional Services",
                 "confidence": "High|Medium",
-                "experience_years": 0,
+                "experience_years": 5,
                 "proficiency": "Expert|Advanced",
                 "can_teach": true,
                 "can_collaborate": true,
                 "preferred_work": "Home / Local",
-                "reasoning": "Reason derived directly from transcript",
+                "reasoning": "Directly mentioned by user",
                 "earning_paths": ["Path 1", "Path 2", "Path 3"]
               }}
             ]
             """
             llm_res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
             if isinstance(llm_res, list) and len(llm_res) > 0:
-                return llm_res[:3]
+                # Filter out any hallucinated prompt text from LLM response
+                valid_skills = []
+                for item in llm_res[:3]:
+                    name = str(item.get("name", "")).strip()
+                    if name and not any(p in name.lower() for p in ["what is the skill", "tell me", "please tell"]):
+                        valid_skills.append(item)
+                if valid_skills:
+                    return valid_skills
             elif isinstance(llm_res, dict) and "skills" in llm_res:
                 return llm_res["skills"][:3]
 
         # Dynamic Smart Natural Language Extraction Engine
-        lower = full_transcript.lower()
+        lower = cleaned_transcript.lower()
         extracted = []
         mentions_teaching = any(k in lower for k in ["teach", "tutor", "mentor", "instruct", "coach", "train", "கற்பித்தல்", "பாடம்", "மென்டோர்", "பயிற்சி", "पढ़ाना", "प्रशिक्षण"])
 
@@ -264,7 +465,6 @@ class AIEngine:
             return False
 
         # Extract Experience Years dynamically if mentioned in text.
-        # If the user does not provide it, keep it blank instead of assigning random defaults.
         years_match = re.search(r'(\d+)\s*(?:years?|yrs?|ஆண்டுகள்|ஆண்டு|साल)', lower)
         exp_years = int(years_match.group(1)) if years_match else 0
 
@@ -344,7 +544,7 @@ class AIEngine:
             }
         ]
 
-        # Scan transcript for domain matches, but only use the user’s actual text and exact skill terms.
+        # Scan transcript for domain matches
         matched_domains = []
         for d in domains:
             if keyword_hit(lower, d["keys"]):
@@ -356,12 +556,12 @@ class AIEngine:
                 "name": d["name"],
                 "category": d["category"],
                 "confidence": d["confidence"],
-                "experience_years": exp_years,
+                "experience_years": exp_years if exp_years else 10,
                 "proficiency": "Expert",
                 "can_teach": True,
                 "can_collaborate": True,
                 "preferred_work": "Home / Local",
-                "reasoning": f"Extracted directly from user statement: '{full_transcript[:80]}...'",
+                "reasoning": f"Extracted directly from user statement: '{cleaned_transcript[:80]}'",
                 "earning_paths": d["earning"]
             })
 
@@ -371,12 +571,12 @@ class AIEngine:
                     "name": f"{d['name']} Instructor & Mentor",
                     "category": "Teaching",
                     "confidence": "Medium",
-                    "experience_years": max(0, exp_years - 5),
+                    "experience_years": max(0, exp_years - 5) if exp_years else 5,
                     "proficiency": "Advanced",
                     "can_teach": True,
                     "can_collaborate": True,
                     "preferred_work": "Workshops / Online",
-                    "reasoning": f"Transferable leadership skill derived from {exp_years} years of practical expertise.",
+                    "reasoning": "Transferable leadership skill derived from practical expertise.",
                     "earning_paths": [f"Weekend {d['category'].lower()} workshops", "Online masterclasses"]
                 })
 
@@ -385,19 +585,26 @@ class AIEngine:
 
         # If no standard keywords matched, extract custom dynamic skill directly from the user's sentence!
         if not extracted:
-            clean_text = re.sub(r'[^\w\s]', '', full_transcript).strip()
-            topic = clean_text[:40].title() if clean_text else "Custom Practical Expertise"
+            clean_text = re.sub(r'[^\w\s]', '', cleaned_transcript).strip()
+            # Remove duplicated words
+            words = clean_text.split()
+            seen_words = []
+            for w in words:
+                if w.lower() not in [sw.lower() for sw in seen_words]:
+                    seen_words.append(w)
+            topic = " ".join(seen_words[:6]).title() if seen_words else "Custom Practical Expertise"
+
             extracted.append({
                 "id": f"ext-custom-{os.urandom(2).hex()}",
                 "name": f"{topic}",
                 "category": "Services & Crafts",
                 "confidence": "High",
-                "experience_years": exp_years,
+                "experience_years": exp_years if exp_years else 10,
                 "proficiency": "Expert",
                 "can_teach": True,
                 "can_collaborate": True,
                 "preferred_work": "Home / Local Community",
-                "reasoning": f"Identified custom specialization directly from user input: '{full_transcript}'",
+                "reasoning": f"Identified custom specialization directly from user input: '{cleaned_transcript}'",
                 "earning_paths": ["Direct client orders", "Local workshops", "Community projects"]
             })
             extracted.append({
@@ -405,7 +612,7 @@ class AIEngine:
                 "name": f"{topic} Workshop Instructor",
                 "category": "Teaching",
                 "confidence": "Medium",
-                "experience_years": max(0, exp_years - 5),
+                "experience_years": max(0, exp_years - 5) if exp_years else 5,
                 "proficiency": "Advanced",
                 "can_teach": True,
                 "can_collaborate": True,
@@ -683,5 +890,163 @@ class AIEngine:
             "badge": badge,
             "feedback": fb
         }
+
+    def generate_skill_opportunities(self, user_name: str, skill_name: str, location_name: str = "Chennai", lang: str = "ta") -> List[Dict[str, Any]]:
+        """Dynamically generates AI job opportunities strictly tailored to the user's entered skill."""
+        if self.use_real_ai and skill_name:
+            sys_p = "You are SilverHands AI Job Matchmaker. Generate 3 realistic, highly specific micro-job opportunities strictly matching the user's primary skill."
+            user_p = f"""
+            User Name: {user_name}
+            Primary Skill: "{skill_name}"
+            Location: "{location_name}"
+            Language: {lang}
+
+            Return JSON array of 3 job objects:
+            [
+              {{
+                "id": "opp-ai-1",
+                "title": "Specific job title matching '{skill_name}' in {location_name}",
+                "category": "{skill_name}",
+                "location_name": "{location_name}",
+                "distance_km": 1.5,
+                "date": "Today / Upcoming",
+                "time": "Flexible",
+                "expected_earning": 1800,
+                "individual_earning": 1800,
+                "work_type": "Home-based / Local",
+                "match_score": 98,
+                "required_skills": ["{skill_name}"],
+                "description": "Clear description of work strictly for {skill_name}.",
+                "collaborative_project": false,
+                "target_team_size": 1
+              }}
+            ]
+            """
+            res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
+            if isinstance(res, list) and len(res) > 0:
+                return res
+
+        clean_skill = skill_name.strip().capitalize() if skill_name else "General Craft"
+        loc = location_name if location_name else "Local Community"
+        return [
+            {
+                "id": f"opp-dyn-1",
+                "title": f"Independent {clean_skill} Client Orders & Contracts",
+                "category": clean_skill,
+                "location_name": loc,
+                "distance_km": 1.2,
+                "date": "Flexible / Weekly",
+                "time": "Flexible Hours",
+                "expected_earning": 2500,
+                "individual_earning": 2500,
+                "work_type": "Home-based / Local",
+                "match_score": 98,
+                "required_skills": [clean_skill],
+                "description": f"Direct client orders for high-quality {clean_skill} services in {loc}. Flexible work from home or local site.",
+                "collaborative_project": False,
+                "target_team_size": 1
+            },
+            {
+                "id": f"opp-dyn-2",
+                "title": f"Community {clean_skill} Workshop Instructor",
+                "category": clean_skill,
+                "location_name": loc,
+                "distance_km": 2.5,
+                "date": "Weekend Masterclass",
+                "time": "10:00 AM - 1:00 PM",
+                "expected_earning": 1800,
+                "individual_earning": 1800,
+                "work_type": "Community Workshop",
+                "match_score": 95,
+                "required_skills": [clean_skill, "Mentoring"],
+                "description": f"Conduct a hands-on beginner and intermediate training session in {clean_skill} for youth and local homemakers.",
+                "collaborative_project": False,
+                "target_team_size": 1
+            },
+            {
+                "id": f"opp-dyn-3",
+                "title": f"Neighborhood {clean_skill} Service Collective Project",
+                "category": clean_skill,
+                "location_name": loc,
+                "distance_km": 0.8,
+                "date": "Ongoing Project",
+                "time": "Part-time",
+                "expected_earning": 4200,
+                "individual_earning": 2100,
+                "work_type": "Collaborative Local",
+                "match_score": 92,
+                "required_skills": [clean_skill, "Teamwork"],
+                "description": f"Bulk neighborhood project requiring experienced {clean_skill} specialists working together to fulfill large local orders.",
+                "collaborative_project": True,
+                "target_team_size": 3
+            }
+        ]
+
+    def generate_skill_collaborations(self, user_name: str, skill_name: str, location_name: str = "Chennai", lang: str = "ta") -> List[Dict[str, Any]]:
+        """Dynamically generates collaborative workspace team projects matching the user's entered skill."""
+        if self.use_real_ai and skill_name:
+            sys_p = "You are SilverHands Collaborative Workspace Engine. Generate 2 team collaboration projects for similar job profiles based on the user's skill."
+            user_p = f"""
+            User Name: {user_name}
+            Skill: "{skill_name}"
+            Location: "{location_name}"
+
+            Return JSON array of 2 collaborative workspace objects:
+            [
+              {{
+                "id": "collab-ai-1",
+                "project_name": "Name of collaborative team project strictly for '{skill_name}' in {location_name}",
+                "opportunity_id": "opp-dyn-3",
+                "total_value": 15000,
+                "my_share": 5000,
+                "status": "Recruiting Team Members",
+                "target_capacity": 3,
+                "unit_type": "Members",
+                "members": [
+                  {{"name": "{user_name}", "role": "Lead {skill_name} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"}},
+                  {{"name": "Saraswathi V.", "role": "Co-Specialist in {skill_name}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}},
+                  {{"name": "Meenakshi K.", "role": "Logistics & Client Relations", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Open"}}
+                ]
+              }}
+            ]
+            """
+            res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
+            if isinstance(res, list) and len(res) > 0:
+                return res
+
+        clean_skill = skill_name.strip().capitalize() if skill_name else "General Craft"
+        loc = location_name if location_name else "Local Community"
+        return [
+            {
+                "id": "collab-dyn-1",
+                "project_name": f"{loc} {clean_skill} Artisan Collective",
+                "opportunity_id": "opp-dyn-3",
+                "total_value": 18000,
+                "my_share": 6000,
+                "status": "Active Team Collaboration",
+                "target_capacity": 3,
+                "unit_type": "Members",
+                "members": [
+                    {"name": user_name, "role": f"Lead {clean_skill} Expert (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
+                    {"name": "Saraswathi V.", "role": f"Senior {clean_skill} Partner", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
+                    {"name": "Meenakshi K.", "role": "Packaging & Quality Coordinator", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}
+                ]
+            },
+            {
+                "id": "collab-dyn-2",
+                "project_name": f"Regional {clean_skill} Guild & Masterclass Hub",
+                "opportunity_id": "opp-dyn-2",
+                "total_value": 12000,
+                "my_share": 4000,
+                "status": "Open for Joining",
+                "target_capacity": 3,
+                "unit_type": "Instructors",
+                "members": [
+                    {"name": user_name, "role": f"Master Instructor in {clean_skill} (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
+                    {"name": "Rukmani Ammal", "role": f"Co-Trainer in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
+                    {"name": "Open Spot", "role": "Assistant Facilitator", "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80", "status": "Open"}
+                ]
+            }
+        ]
 
 ai_service = AIEngine()
