@@ -10,15 +10,16 @@ window.OnboardingComponent = {
   selectedMode: "both",
   interviewStep: 1,
   chatHistory: [],
+  introQuestionShown: false,
   essentialDetails: {
-    name: "Lakshmi Ammal",
-    age: 64,
-    district: "Chennai",
-    taluk: "Mylapore",
-    state: "Tamil Nadu",
-    education: "Higher Secondary School",
-    skills_known: "Cooking, Festival Snacks, Traditional Sweets",
-    phone: "+91 98401 23456"
+    name: "",
+    age: "",
+    district: "",
+    taluk: "",
+    state: "",
+    education: "",
+    skills_known: "",
+    phone: ""
   },
 
   renderLanguageSelection() {
@@ -101,34 +102,41 @@ window.OnboardingComponent = {
     `;
   },
 
+  clearInterviewState() {
+    this.chatHistory = [];
+    this.interviewStep = 1;
+    this.introQuestionShown = false;
+    this.essentialDetails = {
+      ...this.essentialDetails,
+      name: "",
+      age: "",
+      district: "",
+      taluk: "",
+      state: "",
+      education: "",
+      skills_known: "",
+      phone: ""
+    };
+    if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
+      window.SkillCardsComponent.clearExtractedSkills();
+    }
+  },
+
   renderAIInterview() {
-    const ed = this.essentialDetails;
     return `
       <div class="animate-fade-in">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.8rem;">
           <div>
-            <h2>${window.i18n.t("ai_voice_interview")}</h2>
-            <p style="color: var(--text-muted);">Step ${this.interviewStep} of 5 - Tell us about your journey</p>
+            <h2>Skill Discovery</h2>
+            <p style="color: var(--text-muted);">Tell us the skill(s) you know best and can confidently do</p>
           </div>
-          <button class="btn btn-secondary" onclick="window.OnboardingComponent.skipInterview()">
-            ✨ Discover My Skills & Create Dashboard
-          </button>
-        </div>
-
-        <!-- ESSENTIAL DETAILS LIVE PANEL DISPLAY -->
-        <div class="card" style="margin-bottom: 1.5rem; background: linear-gradient(135deg, rgba(13,148,136,0.15), rgba(79,70,229,0.15)); border: 2px solid var(--secondary);">
-          <h3 style="color: var(--secondary); margin-bottom: 0.8rem;">
-            ${window.i18n.t("essential_details_title")}
-          </h3>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; font-size: 0.95rem;">
-            <div>👤 <strong>Name:</strong> ${ed.name}</div>
-            <div>🎂 <strong>Age:</strong> ${ed.age} yrs</div>
-            <div>📍 <strong>District:</strong> ${ed.district}</div>
-            <div>🏡 <strong>Taluk:</strong> ${ed.taluk}</div>
-            <div>🏛️ <strong>State:</strong> ${ed.state}</div>
-            <div>📞 <strong>Contact:</strong> ${ed.phone}</div>
-            <div>🎓 <strong>Education:</strong> ${ed.education || 'High School (Optional)'}</div>
-            <div style="grid-column: span 2;">🛠️ <strong>Extracted Skills:</strong> <span class="badge badge-high">${ed.skills_known}</span></div>
+          <div style="display: flex; gap: 0.7rem; flex-wrap: wrap;">
+            <button class="btn btn-outline" onclick="window.app.goBack()">
+              ← Back
+            </button>
+            <button class="btn btn-secondary" onclick="window.OnboardingComponent.skipInterview()">
+              ✨ Use My Skill Profile
+            </button>
           </div>
         </div>
 
@@ -178,49 +186,64 @@ window.OnboardingComponent = {
   selectLang(lang) {
     window.i18n.setLanguage(lang);
     this.step = 2;
+    this.clearInterviewState();
     window.app.render();
   },
 
   selectMode(mode) {
     this.selectedMode = mode;
     this.step = 3;
+    this.clearInterviewState();
     this.startInterview();
   },
 
   async startInterview() {
     this.chatHistory = [];
-    if (window.app.userProfile) {
-      this.essentialDetails.name = window.app.userProfile.name || "Lakshmi Ammal";
-      this.essentialDetails.district = window.app.userProfile.district || "Chennai";
-      this.essentialDetails.taluk = window.app.userProfile.taluk || "Mylapore";
-      this.essentialDetails.state = window.app.userProfile.state || "Tamil Nadu";
-      this.essentialDetails.phone = window.app.userProfile.phone || "+91 98401 23456";
-      this.essentialDetails.education = window.app.userProfile.education || "Higher Secondary School";
+    this.interviewStep = 1;
+    this.introQuestionShown = false;
+    this.essentialDetails.skills_known = "";
+    if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
+      window.SkillCardsComponent.clearExtractedSkills();
     }
-    window.app.render();
+    if (window.app.userProfile) {
+      this.essentialDetails.name = window.app.userProfile.name || "";
+      this.essentialDetails.district = window.app.userProfile.district || "";
+      this.essentialDetails.taluk = window.app.userProfile.taluk || "";
+      this.essentialDetails.state = window.app.userProfile.state || "";
+      this.essentialDetails.phone = window.app.userProfile.phone || "";
+      this.essentialDetails.education = window.app.userProfile.education || "";
+    }
 
-    const res = await fetch("/api/onboard/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step: 1, user_input: "", history: [], lang: window.i18n.currentLang })
-    });
-    const data = await res.json();
-    this.chatHistory.push({ role: "ai", text: data.question });
-    window.audioEngine.speak(data.question, window.i18n.currentLang);
+    const question = "What is the skill you know best and can confidently do for work or income? Tell me only one or two skills, such as cooking, tailoring, tutoring, gardening, or handicrafts.";
+    if (!this.introQuestionShown) {
+      this.chatHistory.push({ role: "ai", text: question });
+      this.introQuestionShown = true;
+    }
+    if (window.audioEngine && typeof window.audioEngine.speak === "function") {
+      window.audioEngine.speak(question, window.i18n.currentLang);
+    }
     window.app.render();
   },
 
   toggleMic() {
     const btn = document.getElementById("mic-btn");
-    if (window.audioEngine.isListening) {
+    if (window.audioEngine && window.audioEngine.isListening) {
       window.audioEngine.stopListening();
-      window.audioEngine.stopWaveform();
       if (btn) btn.innerHTML = "🎙️ Start Speaking";
-    } else {
+      return;
+    }
+
+    if (window.audioEngine) {
       window.audioEngine.startListening(window.i18n.currentLang);
       window.audioEngine.startWaveform("waveform-canvas");
-      if (btn) btn.innerHTML = "⏹️ Stop Recording";
     }
+    if (btn) btn.innerHTML = "⏹️ Stop Recording";
+  },
+
+  syncMicButtonState() {
+    const btn = document.getElementById("mic-btn");
+    if (!btn) return;
+    btn.innerHTML = window.audioEngine.isListening ? "⏹️ Stop Recording" : "🎙️ Start Speaking";
   },
 
   async sendAnswer(overrideText = null) {
@@ -231,43 +254,44 @@ window.OnboardingComponent = {
     if (input) input.value = "";
     this.chatHistory.push({ role: "user", text: userText });
     this.interviewStep++;
+    this.essentialDetails.skills_known = "";
 
-    // Update Live Essential Details extracted from input
-    if (userText.includes("சமையல்") || userText.includes("cook")) {
-      this.essentialDetails.skills_known = "Traditional Cooking, Snack Preparation";
-    }
-    if (userText.includes("தையல்") || userText.includes("tailor")) {
-      this.essentialDetails.skills_known += ", Tailoring & Embroidery";
-    }
+    window.app.showLoading("Extracting your skills...");
+    try {
+      const res = await fetch("/api/skills/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_text: userText,
+          history: this.chatHistory,
+          lang: window.i18n.currentLang,
+          user_id: window.app.userProfile ? window.app.userProfile.id : null
+        })
+      });
+      const extractedSkills = await res.json();
 
-    window.app.render();
+      if (!Array.isArray(extractedSkills) || !extractedSkills.length) {
+        this.chatHistory.push({ role: "ai", text: "I could not detect a clear skill yet. Please tell me one or two skills you do best, such as cooking, tailoring, tutoring, gardening, or handicrafts." });
+        window.app.hideLoading();
+        window.app.render();
+        return;
+      }
 
-    const res = await fetch("/api/onboard/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        step: this.interviewStep,
-        user_input: userText,
-        history: this.chatHistory,
-        lang: window.i18n.currentLang
-      })
-    });
-    const data = await res.json();
-
-    if (data.is_complete || this.interviewStep >= 4) {
-      this.skipInterview();
-    } else {
-      this.chatHistory.push({ role: "ai", text: data.question });
-      window.audioEngine.speak(data.question, window.i18n.currentLang);
+      this.essentialDetails.skills_known = extractedSkills.map(skill => skill.name).slice(0, 3).join(", ");
+      window.app.hideLoading();
+      window.SkillCardsComponent.setExtractedSkills(extractedSkills);
+      window.app.navigate("confirm_skills");
+    } catch (e) {
+      window.app.hideLoading();
+      this.chatHistory.push({ role: "ai", text: "I had trouble understanding your skill profile. Please tell me your strongest skill in one sentence." });
       window.app.render();
     }
   },
 
   async skipInterview() {
-    const userText = this.chatHistory.map(m => m.text).join(" ");
-    window.app.showLoading("AI Extracting Skills & Saving Essential Profile Details to Database...");
+    const userText = this.chatHistory.filter(m => m.role === "user").map(m => m.text).join(" ") || "I am skilled in cooking, tailoring, and teaching.";
+    window.app.showLoading("Extracting your skill profile...");
 
-    // Update essential profile details in SQLite DB
     if (window.app.userProfile && window.app.userProfile.id) {
       await fetch("/api/users/update_essential", {
         method: "POST",
@@ -285,26 +309,38 @@ window.OnboardingComponent = {
       });
     }
 
-    const res = await fetch("/api/skills/extract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_text: userText || "25 years cooking South Indian traditional snacks and tailoring",
-        history: this.chatHistory,
-        lang: window.i18n.currentLang
-      })
-    });
-    const extractedSkills = await res.json();
-    window.app.hideLoading();
+    try {
+      const res = await fetch("/api/skills/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_text: userText,
+          history: this.chatHistory,
+          lang: window.i18n.currentLang,
+          user_id: window.app.userProfile ? window.app.userProfile.id : null
+        })
+      });
+      const extractedSkills = await res.json();
+      window.app.hideLoading();
 
-    window.SkillCardsComponent.setExtractedSkills(extractedSkills);
-    window.app.navigate("confirm_skills");
+      if (!Array.isArray(extractedSkills) || !extractedSkills.length) {
+        this.chatHistory.push({ role: "ai", text: "I could not detect a clear skill. Please tell me your strongest skill again." });
+        window.app.render();
+        return;
+      }
+
+      window.SkillCardsComponent.setExtractedSkills(extractedSkills);
+      window.app.navigate("confirm_skills");
+    } catch (e) {
+      window.app.hideLoading();
+      alert("We could not extract skills. Please try again.");
+    }
   }
 };
 
 // Listen to STT recognition results
 document.addEventListener("speechResult", (e) => {
-  if (e.detail && e.detail.transcript) {
+  if (e.detail && e.detail.transcript && e.detail.isFinal) {
     window.OnboardingComponent.sendAnswer(e.detail.transcript);
   }
 });

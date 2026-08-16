@@ -6,7 +6,7 @@
 
 class SilverHandsApp {
   constructor() {
-    this.currentView = "onboarding"; // onboarding | confirm_skills | dashboard | radar | collaboration | classes | videos | earnings | admin
+    this.currentView = "auth"; // dashboard | auth | onboarding | confirm_skills | radar | collaboration | classes | videos | earnings | admin
     this.userProfile = null;
     this.fontSize = localStorage.getItem("silverhands_font_size") || "md";
     this.isHighContrast = localStorage.getItem("silverhands_contrast") === "true";
@@ -14,17 +14,34 @@ class SilverHandsApp {
 
   async init() {
     this.applyAccessibilitySettings();
-    await this.loadUserProfile("u-lakshmi-64");
+    this.navigationHistory = [];
+    if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
+      window.SkillCardsComponent.clearExtractedSkills();
+    }
+    const savedUserId = localStorage.getItem("silverhands_user_id");
+    if (savedUserId) {
+      await this.loadUserProfile(savedUserId);
+      if (this.userProfile && Array.isArray(this.userProfile.skills) && this.userProfile.skills.length > 0) {
+        this.currentView = "dashboard";
+      } else {
+        this.currentView = "onboarding";
+      }
+    } else {
+      this.currentView = "auth";
+    }
 
-    // Load initial data components
-    await Promise.all([
-      window.RadarComponent.loadOpportunities(),
+    // Load initial data components only when a real user session exists
+    const loadTasks = [
       window.CollaborationComponent.loadCollaborations(),
       window.ClassesComponent.loadClasses(),
       window.ContentComponent.loadVideos(),
-      window.EarningsComponent.loadEarnings(),
       window.AdminComponent.loadStats()
-    ]);
+    ];
+    if (this.userProfile && this.userProfile.id) {
+      loadTasks.unshift(window.RadarComponent.loadOpportunities());
+      loadTasks.push(window.EarningsComponent.loadEarnings());
+    }
+    await Promise.all(loadTasks);
 
     document.addEventListener("languageChanged", () => this.render());
     this.render();
@@ -33,15 +50,42 @@ class SilverHandsApp {
   async loadUserProfile(userId) {
     try {
       const res = await fetch(`/api/users/${userId}`);
-      this.userProfile = await res.json();
+      if (res.ok) {
+        this.userProfile = await res.json();
+        localStorage.setItem("silverhands_user_id", this.userProfile.id);
+      }
     } catch (e) {
       console.warn("Failed to load user profile:", e);
     }
   }
 
   navigate(viewName) {
+    if (!this.userProfile && viewName !== "auth") {
+      this.currentView = "auth";
+      this.render();
+      return;
+    }
+    if (this.currentView !== viewName && this.currentView) {
+      this.navigationHistory.push(this.currentView);
+    }
     this.currentView = viewName;
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.render();
+  }
+
+  goBack() {
+    if (this.navigationHistory.length === 0) {
+      if (this.userProfile) {
+        this.currentView = "dashboard";
+      } else {
+        this.currentView = "auth";
+      }
+      this.render();
+      return;
+    }
+
+    const previous = this.navigationHistory.pop();
+    this.currentView = previous || "dashboard";
     this.render();
   }
 
@@ -87,9 +131,11 @@ class SilverHandsApp {
   }
 
   renderNav() {
+    const u = this.userProfile || { name: "Guest User", avatar_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80" };
+
     return `
       <header class="top-nav">
-        <div class="logo-group" onclick="window.app.navigate('dashboard')">
+        <div class="logo-group" onclick="window.app.navigate('dashboard')" style="cursor: pointer;" title="Back to Dashboard">
           <div class="logo-badge">✋</div>
           <div>
             <div class="logo-title">SILVERHANDS</div>
@@ -97,8 +143,8 @@ class SilverHandsApp {
           </div>
         </div>
 
-        <!-- Senior Accessibility Toolbar in Nav -->
         <div class="nav-actions">
+          <!-- Senior Accessibility Toolbar in Nav -->
           <div class="accessibility-bar" title="Senior Accessibility Controls">
             <span style="font-size: 0.85rem; color: var(--text-muted);">Text Size:</span>
             <button class="acc-btn ${this.fontSize==='sm'?'active':''}" onclick="window.app.setFontSize('sm')">A-</button>
@@ -120,28 +166,42 @@ class SilverHandsApp {
             <option value="ml" ${window.i18n.currentLang==='ml'?'selected':''}>മലയാളം (Malayalam)</option>
             <option value="en" ${window.i18n.currentLang==='en'?'selected':''}>English</option>
           </select>
+
+          <!-- Current User Session Profile Pill -->
+          <div style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255,255,255,0.08); padding: 0.3rem 0.8rem; border-radius: 30px; border: 1px solid var(--surface-border);">
+            <img src="${u.avatar_url}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
+            <div style="font-size: 0.9rem; font-weight: 700; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main);">
+              ${u.name}
+            </div>
+            <button class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; border-color: var(--secondary); color: var(--secondary);" onclick="window.app.navigate('auth')" title="Switch or Login Account">
+              🔄 Switch
+            </button>
+          </div>
         </div>
       </header>
 
-      <!-- Navigation Tabs -->
+      <!-- Primary Navigation Tabs Bar -->
       <nav class="nav-tabs">
         <button class="nav-tab ${this.currentView==='dashboard'?'active':''}" onclick="window.app.navigate('dashboard')">
-          🏠 ${window.i18n.t('my_skills')}
+          🏠 My Dashboard
         </button>
         <button class="nav-tab ${this.currentView==='radar'?'active':''}" onclick="window.app.navigate('radar')">
-          🔎 ${window.i18n.t('opportunities')}
+          📍 Nearby Jobs
         </button>
         <button class="nav-tab ${this.currentView==='collaboration'?'active':''}" onclick="window.app.navigate('collaboration')">
-          🤝 ${window.i18n.t('collaborations')}
+          🤝 Collaborations
         </button>
         <button class="nav-tab ${this.currentView==='classes'?'active':''}" onclick="window.app.navigate('classes')">
-          🎓 ${window.i18n.t('my_classes')}
+          🎓 Masterclasses
         </button>
         <button class="nav-tab ${this.currentView==='videos'?'active':''}" onclick="window.app.navigate('videos')">
-          🎥 ${window.i18n.t('my_videos')}
+          🎥 Content Studio
         </button>
         <button class="nav-tab ${this.currentView==='earnings'?'active':''}" onclick="window.app.navigate('earnings')">
-          💰 ${window.i18n.t('earnings')}
+          💰 Earnings
+        </button>
+        <button class="nav-tab ${this.currentView==='onboarding'?'active':''}" onclick="window.app.navigate('onboarding')">
+          ✨ Discover Skills
         </button>
         <button class="nav-tab ${this.currentView==='admin'?'active':''}" onclick="window.app.navigate('admin')">
           ⚙️ Admin
@@ -152,6 +212,8 @@ class SilverHandsApp {
 
   renderView() {
     switch (this.currentView) {
+      case "auth":
+        return window.AuthComponent.render();
       case "onboarding":
         if (window.OnboardingComponent.step === 1) return window.OnboardingComponent.renderLanguageSelection();
         if (window.OnboardingComponent.step === 2) return window.OnboardingComponent.renderModeSelection();
@@ -181,13 +243,15 @@ class SilverHandsApp {
     const root = document.getElementById("app-container");
     if (!root) return;
 
+    const showBack = this.currentView !== "auth" && this.currentView !== "dashboard";
+
     root.innerHTML = `
-      <!-- Top Hackathon Demo Story Bar -->
-      <div class="demo-banner">
-        <div>🏆 SilverHands Ecosystem Hackathon Live Demo Mode</div>
-        <button class="btn btn-outline" style="padding: 0.3rem 0.8rem; font-size: 0.85rem; border-color: #fff; color: #fff;" onclick="window.DemoStoryComponent.startGuidedDemo()">
-          ▶️ ${window.DemoStoryComponent.isRunning ? `Step ${window.DemoStoryComponent.currentStep+1}/15: Next Step ➔` : 'Launch 15-Step Story Demo'}
-        </button>
+      <div class="demo-banner" style="justify-content: space-between;">
+        <div>🏦 SilverHands Community Prototype</div>
+        <div style="display: flex; align-items: center; gap: 0.7rem;">
+          ${showBack ? `<button class="btn btn-outline" style="padding: 0.3rem 0.8rem; font-size: 0.85rem; border-color: #fff; color: #fff;" onclick="window.app.goBack()">← Back</button>` : ``}
+          <span style="font-size: 0.82rem; opacity: 0.9;">Real user flow prototype</span>
+        </div>
       </div>
 
       ${this.renderNav()}

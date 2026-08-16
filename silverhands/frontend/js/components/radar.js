@@ -9,21 +9,41 @@ window.RadarComponent = {
   viewMode: 'list', // 'list' or 'map'
 
   async loadOpportunities() {
+    const userId = (window.app.userProfile && window.app.userProfile.id) || localStorage.getItem("silverhands_user_id") || "u-lakshmi-64";
+    if (!userId) return;
     try {
-      const res = await fetch(`/api/opportunities/match/${window.app.userProfile.id || 'u-lakshmi-64'}`);
+      const res = await fetch(`/api/opportunities/match/${userId}`);
       this.opportunities = await res.json();
     } catch (e) {
       console.warn("Error fetching opportunities:", e);
+      this.opportunities = [];
     }
   },
 
   render() {
+    if (!window.app.userProfile || !(window.app.userProfile.skills && window.app.userProfile.skills.length)) {
+      return `
+        <div class="animate-fade-in" style="max-width: 760px; margin: 2rem auto; text-align: center;">
+          <div class="card" style="border: 2px dashed var(--secondary); background: rgba(13,148,136,0.08);">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">📍</div>
+            <h1 class="brand-font" style="color: var(--secondary); margin-bottom: 0.8rem;">No jobs yet</h1>
+            <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 1.5rem;">
+              Complete your skill profile first so nearby jobs are suggested from the skills you actually know.
+            </p>
+            <button class="btn btn-primary btn-lg" onclick="window.app.navigate('onboarding')">
+              ✨ Add My Skills
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="animate-fade-in">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h1 class="brand-font" style="color: var(--primary);">🔎 Local Opportunity Radar</h1>
-            <p style="color: var(--text-muted);">Matches based on skill similarity, location radius, availability, and earnings goal.</p>
+            <p style="color: var(--text-muted);">Matches based on your confirmed skill profile, location radius, and earning fit.</p>
           </div>
 
           <div style="display: flex; gap: 0.8rem;">
@@ -42,6 +62,14 @@ window.RadarComponent = {
   },
 
   renderListView() {
+    if (!this.opportunities.length) {
+      return `
+        <div class="card" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+          No nearby jobs match your current skill profile yet. Add or confirm more skills to unlock better recommendations.
+        </div>
+      `;
+    }
+
     return `
       <div style="display: flex; flex-direction: column; gap: 1.5rem;">
         ${this.opportunities.map(opp => `

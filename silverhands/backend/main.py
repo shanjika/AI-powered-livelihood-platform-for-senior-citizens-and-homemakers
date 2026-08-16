@@ -12,9 +12,14 @@ from typing import Dict, List, Any, Optional
 import os
 import json
 
-from database import get_db, init_db, haversine_distance
-from ai_engine import ai_service
-from opportunity_matcher import calculate_match_score, recommend_collaboration_team
+try:
+    from .database import get_db, init_db, haversine_distance
+    from .ai_engine import ai_service
+    from .opportunity_matcher import calculate_match_score, recommend_collaboration_team
+except ImportError:  # pragma: no cover - fallback when started directly
+    from database import get_db, init_db, haversine_distance
+    from ai_engine import ai_service
+    from opportunity_matcher import calculate_match_score, recommend_collaboration_team
 
 app = FastAPI(
     title="SilverHands API Ecosystem",
@@ -30,6 +35,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def disable_cache_middleware(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 # Models
 class LoginRequest(BaseModel):
     email: str
@@ -38,6 +51,7 @@ class LoginRequest(BaseModel):
 class SignUpRequest(BaseModel):
     email: str
     name: str
+    age: Optional[int] = None
     phone: str
     password: Optional[str] = "password123"
     district: Optional[str] = "Chennai"
@@ -49,7 +63,7 @@ class SignUpRequest(BaseModel):
 class EssentialDetailsRequest(BaseModel):
     user_id: str
     name: str
-    age: int
+    age: Optional[int] = None
     phone: str
     district: str
     taluk: str
@@ -72,6 +86,11 @@ class SkillExtractRequest(BaseModel):
     user_text: str
     history: List[Dict[str, str]] = []
     lang: str = "ta"
+    user_id: Optional[str] = None
+
+class SkillSaveRequest(BaseModel):
+    user_id: str
+    skills: List[Dict[str, Any]]
 
 class ClassCreateRequest(BaseModel):
     prompt: str
@@ -118,26 +137,26 @@ def login(req: LoginRequest):
             "email": req.email,
             "password": req.password,
             "name": name_part,
-            "age": 60,
-            "gender": "Female",
-            "role": "SilverHands Community Member",
-            "phone": "+91 98401 00000",
-            "district": "Chennai",
-            "taluk": "Mylapore",
-            "state": "Tamil Nadu",
-            "education": "Higher Secondary School",
+            "age": None,
+            "gender": "",
+            "role": "",
+            "phone": "",
+            "district": "",
+            "taluk": "",
+            "state": "",
+            "education": "",
             "language": "ta",
-            "location_name": "Mylapore, Chennai",
-            "latitude": 13.0339,
-            "longitude": 80.2696,
+            "location_name": "",
+            "latitude": None,
+            "longitude": None,
             "avatar_url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
-            "trust_score": 95,
-            "skill_strength_score": 90,
-            "identity_verified": 1,
-            "rating": 4.8,
-            "reviews_count": 5,
-            "completed_jobs": 4,
-            "bio": f"Skilled member from Chennai. Registered via {req.email}"
+            "trust_score": 0,
+            "skill_strength_score": 0,
+            "identity_verified": 0,
+            "rating": 0,
+            "reviews_count": 0,
+            "completed_jobs": 0,
+            "bio": ""
         }
         cursor.execute("""
         INSERT INTO users (id, email, password, name, age, gender, role, phone, district, taluk, state, education, language, location_name, latitude, longitude, avatar_url, trust_score, skill_strength_score, identity_verified, rating, reviews_count, completed_jobs, bio)
@@ -167,26 +186,26 @@ def signup(req: SignUpRequest):
         "email": req.email,
         "password": req.password,
         "name": req.name,
-        "age": 60,
-        "gender": "Female",
-        "role": "Homemaker & Skilled Artisan",
-        "phone": req.phone,
-        "district": req.district,
-        "taluk": req.taluk,
-        "state": req.state,
-        "education": req.education,
+        "age": req.age,
+        "gender": "",
+        "role": "",
+        "phone": req.phone or "",
+        "district": req.district or "",
+        "taluk": req.taluk or "",
+        "state": req.state or "",
+        "education": req.education or "",
         "language": req.language,
-        "location_name": location,
-        "latitude": 13.0339,
-        "longitude": 80.2696,
+        "location_name": location if location and location.strip() else "",
+        "latitude": None,
+        "longitude": None,
         "avatar_url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
-        "trust_score": 95,
-        "skill_strength_score": 90,
-        "identity_verified": 1,
-        "rating": 4.8,
-        "reviews_count": 1,
+        "trust_score": 0,
+        "skill_strength_score": 0,
+        "identity_verified": 0,
+        "rating": 0,
+        "reviews_count": 0,
         "completed_jobs": 0,
-        "bio": f"Experienced in {req.district}, {req.state}."
+        "bio": ""
     }
     cursor.execute("""
     INSERT INTO users (id, email, password, name, age, gender, role, phone, district, taluk, state, education, language, location_name, latitude, longitude, avatar_url, trust_score, skill_strength_score, identity_verified, rating, reviews_count, completed_jobs, bio)
@@ -214,8 +233,8 @@ def update_essential_details(req: EssentialDetailsRequest):
 @app.post("/api/skills/assess")
 def assess_skill_strength(req: StrengthAssessRequest):
     """Generates strength analysis score & feedback based on user skill assessment questions."""
-    strength_score = 94
-    feedback = f"Master Artisan Level in {req.skill_name}. Demonstrated deep domain expertise in bulk preparation, quality control, and regional spicing secrets."
+    eval_res = ai_service.assess_skill_strength(req.user_id, req.skill_name, req.answers, req.lang)
+    strength_score = eval_res.get("strength_score", 92)
     
     conn = get_db()
     cursor = conn.cursor()
@@ -223,13 +242,7 @@ def assess_skill_strength(req: StrengthAssessRequest):
     conn.commit()
     conn.close()
 
-    return {
-        "skill_name": req.skill_name,
-        "strength_score": strength_score,
-        "level": "Expert / Master Artisan",
-        "badge": "🏆 SilverHands Verified Master",
-        "feedback": feedback
-    }
+    return eval_res
 
 # User & Skill Endpoints
 @app.get("/api/users/{user_id}")
@@ -253,7 +266,49 @@ def onboard_chat(req: ChatRequest):
 
 @app.post("/api/skills/extract")
 def extract_skills(req: SkillExtractRequest):
-    return ai_service.extract_skills(req.user_text, req.history, req.lang)
+    extracted = ai_service.extract_skills(req.user_text, req.history, req.lang)
+    if req.user_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_skills WHERE user_id = ?", (req.user_id,))
+        for s in extracted:
+            sid = s.get("id") or f"s-{os.urandom(3).hex()}"
+            cursor.execute("""
+            INSERT OR REPLACE INTO user_skills (id, user_id, name, category, confidence, experience_years, proficiency, can_teach, can_collaborate, preferred_work, specializations, reasoning, earning_paths, confirmed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                sid, req.user_id, s.get("name"), s.get("category", "Services"),
+                s.get("confidence", "High"), s.get("experience_years", 15),
+                s.get("proficiency", "Expert"), 1 if s.get("can_teach") else 0,
+                1 if s.get("can_collaborate") else 0, s.get("preferred_work", "Local"),
+                json.dumps(s.get("specializations", [])), s.get("reasoning", ""),
+                json.dumps(s.get("earning_paths", [])), 1
+            ))
+        conn.commit()
+        conn.close()
+    return extracted
+
+@app.post("/api/skills/save")
+def save_skills(req: SkillSaveRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_skills WHERE user_id = ?", (req.user_id,))
+    for s in req.skills:
+        sid = s.get("id") or f"s-{os.urandom(3).hex()}"
+        cursor.execute("""
+        INSERT INTO user_skills (id, user_id, name, category, confidence, experience_years, proficiency, can_teach, can_collaborate, preferred_work, specializations, reasoning, earning_paths, confirmed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            sid, req.user_id, s.get("name"), s.get("category", "Services"),
+            s.get("confidence", "High"), s.get("experience_years", 10),
+            s.get("proficiency", "Expert"), 1 if s.get("can_teach") else 0,
+            1 if s.get("can_collaborate") else 0, s.get("preferred_work", "Local"),
+            json.dumps(s.get("specializations", [])), s.get("reasoning", ""),
+            json.dumps(s.get("earning_paths", [])), 1
+        ))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "saved": len(req.skills)}
 
 # Opportunities & Radar
 @app.get("/api/opportunities")
@@ -271,6 +326,9 @@ def get_opportunities(category: Optional[str] = None):
 @app.get("/api/opportunities/match/{user_id}")
 def match_opportunities(user_id: str):
     user = get_user(user_id)
+    if not user.get("skills"):
+        return []
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM opportunities")
@@ -280,6 +338,8 @@ def match_opportunities(user_id: str):
     matched = []
     for opp in opps:
         score = calculate_match_score(user, opp)
+        if score <= 0:
+            continue
         opp["match_score"] = score
         u_lat, u_lon = user.get("latitude", 13.0339), user.get("longitude", 80.2696)
         o_lat, o_lon = opp.get("latitude", 13.0320), opp.get("longitude", 80.2710)

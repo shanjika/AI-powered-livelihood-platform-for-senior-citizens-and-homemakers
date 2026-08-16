@@ -8,11 +8,16 @@ window.EarningsComponent = {
   data: null,
 
   async loadEarnings() {
+    if (!window.app || !window.app.userProfile || !window.app.userProfile.id) {
+      this.data = null;
+      return;
+    }
     try {
-      const res = await fetch(`/api/earnings/${window.app.userProfile.id || 'u-lakshmi-64'}`);
+      const res = await fetch(`/api/earnings/${window.app.userProfile.id}`);
       this.data = await res.json();
     } catch (e) {
       console.warn("Error fetching earnings:", e);
+      this.data = null;
     }
   },
 

@@ -11,40 +11,54 @@ class AudioEngine {
     this.synthesis = window.speechSynthesis;
     this.voiceSpeed = parseFloat(localStorage.getItem("silverhands_voice_speed") || "1.0");
     this.canvasAnimId = null;
+    this.fallbackTimer = null;
     this.initSpeechRecognition();
   }
 
   initSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      this.recognition = new SpeechRecognition();
-      this.recognition.continuous = false;
-      this.recognition.interimResults = true;
+    if (!SpeechRecognition) return;
 
-      this.recognition.onstart = () => {
-        this.isListening = true;
-        document.dispatchEvent(new CustomEvent("speechStart"));
-      };
+    this.recognition = new SpeechRecognition();
+    this.recognition.continuous = false;
+    this.recognition.interimResults = true;
 
-      this.recognition.onresult = (event) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript } }));
-      };
+    this.recognition.onstart = () => {
+      this.isListening = true;
+      document.dispatchEvent(new CustomEvent("speechStart"));
+      const btn = document.getElementById("mic-btn");
+      if (btn) btn.innerHTML = "⏹️ Stop Recording";
+    };
 
-      this.recognition.onend = () => {
-        this.isListening = false;
-        document.dispatchEvent(new CustomEvent("speechEnd"));
-      };
+    this.recognition.onresult = (event) => {
+      let transcript = "";
+      let isFinal = false;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        transcript += result[0].transcript;
+        if (result.isFinal) isFinal = true;
+      }
+      if (isFinal) {
+        document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript, isFinal: true } }));
+      }
+    };
 
-      this.recognition.onerror = (err) => {
-        console.warn("Speech recognition error:", err);
-        this.isListening = false;
-        document.dispatchEvent(new CustomEvent("speechEnd"));
-      };
-    }
+    this.recognition.onend = () => {
+      this.isListening = false;
+      this.stopWaveform();
+      const btn = document.getElementById("mic-btn");
+      if (btn) btn.innerHTML = "🎙️ Start Speaking";
+      document.dispatchEvent(new CustomEvent("speechEnd"));
+    };
+
+    this.recognition.onerror = (err) => {
+      console.warn("Speech recognition error:", err);
+      this.isListening = false;
+      this.stopWaveform();
+      const btn = document.getElementById("mic-btn");
+      if (btn) btn.innerHTML = "🎙️ Start Speaking";
+      document.dispatchEvent(new CustomEvent("speechEnd"));
+    };
   }
 
   setSpeed(speedRate) {
@@ -53,29 +67,114 @@ class AudioEngine {
   }
 
   startListening(langCode = "ta") {
+    const langMap = { ta: "ta-IN", hi: "hi-IN", te: "te-IN", kn: "kn-IN", ml: "ml-IN", en: "en-IN" };
+
+    if (this.fallbackTimer) {
+      clearTimeout(this.fallbackTimer);
+      this.fallbackTimer = null;
+    }
+
     if (this.recognition) {
-      const langMap = { ta: "ta-IN", hi: "hi-IN", te: "te-IN", kn: "kn-IN", ml: "ml-IN", en: "en-IN" };
+      try {
+        if (this.isListening) {
+          this.stopListening();
+          return;
+        }
+        this.recognition.lang = langMap[langCode] || "ta-IN";
+        this.recognition.start();
+        return;
+      } catch (e) {
+        console.warn("Recognition start exception:", e);
+      }
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      this.recognition = new SpeechRecognition();
+      this.recognition.continuous = false;
+      this.recognition.interimResults = true;
       this.recognition.lang = langMap[langCode] || "ta-IN";
+      this.recognition.onstart = () => {
+        this.isListening = true;
+        document.dispatchEvent(new CustomEvent("speechStart"));
+        const btn = document.getElementById("mic-btn");
+        if (btn) btn.innerHTML = "⏹️ Stop Recording";
+      };
+      this.recognition.onresult = (event) => {
+        let transcript = "";
+        let isFinal = false;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          transcript += result[0].transcript;
+          if (result.isFinal) isFinal = true;
+        }
+        if (isFinal) {
+          document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript, isFinal: true } }));
+        }
+      };
+      this.recognition.onend = () => {
+        this.isListening = false;
+        this.stopWaveform();
+        const btn = document.getElementById("mic-btn");
+        if (btn) btn.innerHTML = "🎙️ Start Speaking";
+        document.dispatchEvent(new CustomEvent("speechEnd"));
+      };
+      this.recognition.onerror = (err) => {
+        console.warn("Speech recognition error:", err);
+        this.isListening = false;
+        this.stopWaveform();
+        const btn = document.getElementById("mic-btn");
+        if (btn) btn.innerHTML = "🎙️ Start Speaking";
+        document.dispatchEvent(new CustomEvent("speechEnd"));
+      };
       try {
         this.recognition.start();
       } catch (e) {
         console.warn("Recognition start exception:", e);
       }
-    } else {
-      // Simulated listening fallback
-      document.dispatchEvent(new CustomEvent("speechStart"));
-      setTimeout(() => {
-        const sim = "எனக்கு 25 வருடமாக சமையல் தெரியும். பாரம்பரியமான தின்பண்டங்கள் செய்வதில் அனுபவம் உள்ளது.";
-        document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript: sim } }));
-        document.dispatchEvent(new CustomEvent("speechEnd"));
-      }, 3500);
+      return;
     }
+
+    this.isListening = true;
+    document.dispatchEvent(new CustomEvent("speechStart"));
+    const btn = document.getElementById("mic-btn");
+    if (btn) btn.innerHTML = "⏹️ Stop Recording";
+    this.fallbackTimer = setTimeout(() => {
+      const sim = "I know cooking and I can prepare healthy snacks for local orders.";
+      document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript: sim, isFinal: true } }));
+      this.isListening = false;
+      this.fallbackTimer = null;
+      const fallbackBtn = document.getElementById("mic-btn");
+      if (fallbackBtn) fallbackBtn.innerHTML = "🎙️ Start Speaking";
+      document.dispatchEvent(new CustomEvent("speechEnd"));
+    }, 3500);
   }
 
   stopListening() {
-    if (this.recognition && this.isListening) {
-      this.recognition.stop();
+    this.isListening = false;
+    this.stopWaveform();
+
+    if (this.fallbackTimer) {
+      clearTimeout(this.fallbackTimer);
+      this.fallbackTimer = null;
     }
+
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch (e) {
+        console.warn("Recognition stop exception:", e);
+      }
+      try {
+        this.recognition.abort();
+      } catch (e) {
+        console.warn("Recognition abort exception:", e);
+      }
+    }
+
+    const btn = document.getElementById("mic-btn");
+    if (btn) btn.innerHTML = "🎙️ Start Speaking";
+    document.dispatchEvent(new CustomEvent("speechEnd"));
   }
 
   speak(text, langCode = "ta") {

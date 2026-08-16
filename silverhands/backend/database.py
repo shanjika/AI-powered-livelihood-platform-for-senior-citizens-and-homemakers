@@ -20,6 +20,41 @@ from seed_data import (
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "silverhands.db")
 
+
+def get_primary_skill(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return a single top-ranked skill based on experience, fallback-safe for empty profiles."""
+    skills = user.get("skills") or []
+    if not skills:
+        return None
+    return max(skills, key=lambda skill: int(skill.get("experience_years", 0) or 0))
+
+
+def get_recommended_nearby_jobs(user: Dict[str, Any], opportunities: List[Dict[str, Any]], limit: int = 3) -> List[Dict[str, Any]]:
+    """Filter opportunities to the current user's primary skill category and nearby location."""
+    profile_skill = get_primary_skill(user)
+    primary_category = (profile_skill or {}).get("category")
+    primary_name = (profile_skill or {}).get("name", "")
+    user_lat = user.get("latitude", 13.0339)
+    user_lon = user.get("longitude", 80.2696)
+
+    matches = []
+    for opp in opportunities:
+        category = opp.get("category") or ""
+        job_name = opp.get("title") or ""
+        if primary_category and category != primary_category:
+            if not primary_name or primary_name.lower() not in job_name.lower():
+                continue
+        opp_lat = opp.get("latitude", user_lat)
+        opp_lon = opp.get("longitude", user_lon)
+        distance = haversine_distance(user_lat, user_lon, opp_lat, opp_lon)
+        opp_copy = dict(opp)
+        opp_copy["distance_km"] = round(distance, 1)
+        matches.append(opp_copy)
+
+    matches.sort(key=lambda opp: (opp.get("match_score", 0), -(opp.get("distance_km", 9999))), reverse=True)
+    return matches[:limit]
+
+
 def dict_factory(cursor, row):
     d = {}
     for idx, col in enumerate(cursor.description):
@@ -190,13 +225,34 @@ def init_db():
     if count == 0:
         seed_database(conn)
     else:
-        # Migration: Ensure location columns exist
+        # Migration: ensure user schema matches the app expectations for older SQLite databases.
+        existing_columns = [row["name"] for row in cursor.execute("PRAGMA table_info(users)").fetchall()]
+        for column_name, column_sql in {
+            "password": "TEXT DEFAULT 'password123'",
+            "district": "TEXT",
+            "taluk": "TEXT",
+            "state": "TEXT DEFAULT 'Tamil Nadu'",
+            "education": "TEXT",
+            "skill_strength_score": "INTEGER DEFAULT 92",
+            "location_name": "TEXT",
+            "latitude": "REAL",
+            "longitude": "REAL",
+            "avatar_url": "TEXT",
+            "trust_score": "INTEGER DEFAULT 95",
+            "identity_verified": "BOOLEAN DEFAULT 1",
+            "rating": "REAL DEFAULT 4.8",
+            "reviews_count": "INTEGER DEFAULT 10",
+            "completed_jobs": "INTEGER DEFAULT 12",
+            "bio": "TEXT",
+            "language": "TEXT DEFAULT 'ta'",
+        }.items():
+            if column_name not in existing_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}")
+                except Exception:
+                    pass
+
         try:
-            cursor.execute("ALTER TABLE users ADD COLUMN district TEXT")
-            cursor.execute("ALTER TABLE users ADD COLUMN taluk TEXT")
-            cursor.execute("ALTER TABLE users ADD COLUMN state TEXT DEFAULT 'Tamil Nadu'")
-            cursor.execute("ALTER TABLE users ADD COLUMN education TEXT")
-            cursor.execute("ALTER TABLE users ADD COLUMN skill_strength_score INTEGER DEFAULT 92")
             cursor.execute("ALTER TABLE videos ADD COLUMN video_url TEXT")
             conn.commit()
         except Exception:

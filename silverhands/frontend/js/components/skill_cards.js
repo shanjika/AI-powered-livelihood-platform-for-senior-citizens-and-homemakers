@@ -8,6 +8,11 @@ window.SkillCardsComponent = {
   extractedSkills: [],
   confirmedSkillIds: new Set(),
 
+  clearExtractedSkills() {
+    this.extractedSkills = [];
+    this.confirmedSkillIds = new Set();
+  },
+
   setExtractedSkills(skills) {
     this.extractedSkills = skills;
     this.confirmedSkillIds = new Set(skills.map(s => s.id));
@@ -48,8 +53,8 @@ window.SkillCardsComponent = {
                   <strong>Why AI identified it:</strong> ${s.reasoning}
                 </div>
 
-                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                  <div><strong>Experience:</strong> ${s.experience_years} years</div>
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                  <div><strong>Experience:</strong> ${s.experience_years ? `${s.experience_years} years` : 'Not specified'}</div>
                   <div><strong>Level:</strong> ${s.proficiency || 'Expert'}</div>
                 </div>
 
@@ -64,7 +69,10 @@ window.SkillCardsComponent = {
           }).join('')}
         </div>
 
-        <div style="text-align: center;">
+        <div style="text-align: center; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+          <button class="btn btn-outline btn-lg" onclick="window.app.goBack()">
+            ← Back to Interview
+          </button>
           <button class="btn btn-primary btn-lg" onclick="window.SkillCardsComponent.saveAndGoToDashboard()">
             🎉 Confirm & Go To My Skill Dashboard ➔
           </button>
@@ -87,8 +95,28 @@ window.SkillCardsComponent = {
     window.app.render();
   },
 
-  saveAndGoToDashboard() {
+  async saveAndGoToDashboard() {
     const selected = this.extractedSkills.filter(s => this.confirmedSkillIds.has(s.id));
+    if (!selected.length) {
+      alert("Please confirm at least one skill before continuing.");
+      return;
+    }
+
+    if (window.app.userProfile && window.app.userProfile.id) {
+      try {
+        const res = await fetch("/api/skills/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: window.app.userProfile.id, skills: selected })
+        });
+        if (!res.ok) {
+          console.warn("Skill save failed, continuing with local state only.");
+        }
+      } catch (e) {
+        console.warn("Could not persist selected skills:", e);
+      }
+    }
+
     window.app.userProfile.skills = selected;
     window.app.navigate("dashboard");
   }

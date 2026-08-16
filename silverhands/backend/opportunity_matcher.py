@@ -6,21 +6,29 @@ And AI Team Collaboration Formation algorithm.
 """
 from typing import Dict, List, Any
 import math
-from database import haversine_distance, get_db
+
+try:
+    from .database import haversine_distance, get_db
+except ImportError:  # pragma: no cover - fallback when started directly
+    from database import haversine_distance, get_db
 
 def calculate_match_score(user: Dict[str, Any], opportunity: Dict[str, Any]) -> int:
     """Calculates weighted match score (0-100%) between a user profile and an opportunity."""
-    user_skills = [s["name"].lower() for s in user.get("skills", [])]
-    user_categories = [s["category"].lower() for s in user.get("skills", [])]
-    req_skills = [s.lower() for s in opportunity.get("required_skills", [])]
-    opp_category = opportunity.get("category", "").lower()
+    user_skills = user.get("skills") or []
+    if not user_skills:
+        return 0
+
+    user_skill_names = [str(s.get("name", "")).lower() for s in user_skills]
+    user_categories = [str(s.get("category", "")).lower() for s in user_skills]
+    req_skills = [str(s).lower() for s in opportunity.get("required_skills", [])]
+    opp_category = str(opportunity.get("category", "")).lower()
 
     # 1. Skill Similarity (40%)
     skill_score = 0.0
     if opp_category in user_categories:
         skill_score += 0.5
     for r in req_skills:
-        for u_s in user_skills:
+        for u_s in user_skill_names:
             if r in u_s or u_s in r:
                 skill_score += 0.5
                 break
