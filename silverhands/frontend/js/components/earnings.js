@@ -43,6 +43,32 @@ window.EarningsComponent = {
     }
 
     const d = this.data;
+    const primarySkill = skills.reduce((best, current) => {
+      const bestYears = Number(best && best.experience_years) || 0;
+      const currentYears = Number(current && current.experience_years) || 0;
+      return currentYears > bestYears ? current : best;
+    }, skills[0]);
+    const skillName = (primarySkill && primarySkill.name) || (d && d.skill_name) || "Skill";
+
+    const defaultWays = [
+      {
+        title: `1. Custom ${skillName} Client Orders`,
+        potential: "₹4,000 – ₹10,000 / month",
+        desc: `Take bespoke ${skillName.toLowerCase()} orders and customized client requests.`
+      },
+      {
+        title: `2. Weekend ${skillName} Workshops & Classes`,
+        potential: "₹3,000 – ₹7,000 / month",
+        desc: `Host interactive sessions teaching fundamental ${skillName.toLowerCase()} techniques.`
+      },
+      {
+        title: `3. Community Exhibition & Collective Projects`,
+        potential: "₹5,000 – ₹15,000 / event",
+        desc: `Join neighborhood team orders and showcase your ${skillName.toLowerCase()} crafts.`
+      }
+    ];
+
+    const waysToEarn = (d && Array.isArray(d.ways_to_earn) && d.ways_to_earn.length) ? d.ways_to_earn : defaultWays;
 
     return `
       <div class="animate-fade-in">
@@ -98,21 +124,15 @@ window.EarningsComponent = {
           <!-- AI Income Recommendations -->
           <div class="card" style="border: 2px solid var(--primary);">
             <h3 style="margin-bottom: 1rem; color: var(--primary);">🤖 AI "Ways You Can Earn"</h3>
-            <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.2rem;">Based on your cooking & teaching profile:</p>
+            <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.2rem;">Based on your <strong>${skillName}</strong> profile:</p>
 
             <div style="display: flex; flex-direction: column; gap: 1rem;">
-              <div style="background: rgba(0,0,0,0.25); padding: 1rem; border-radius: var(--radius-sm);">
-                <strong>1. Homemade Snack Orders</strong>
-                <div style="color: var(--success); font-weight: 700; margin-top: 0.2rem;">Est. Potential: ₹3,000 – ₹8,000 / month</div>
-              </div>
-              <div style="background: rgba(0,0,0,0.25); padding: 1rem; border-radius: var(--radius-sm);">
-                <strong>2. Weekend Cooking Workshops</strong>
-                <div style="color: var(--success); font-weight: 700; margin-top: 0.2rem;">Est. Potential: ₹2,000 – ₹6,000 / month</div>
-              </div>
-              <div style="background: rgba(0,0,0,0.25); padding: 1rem; border-radius: var(--radius-sm);">
-                <strong>3. Community Event Catering</strong>
-                <div style="color: var(--success); font-weight: 700; margin-top: 0.2rem;">Est. Potential: ₹5,000 – ₹15,000 / event</div>
-              </div>
+              ${waysToEarn.map(w => `
+                <div style="background: rgba(0,0,0,0.25); padding: 1rem; border-radius: var(--radius-sm);">
+                  <strong>${w.title}</strong>
+                  <div style="color: var(--success); font-weight: 700; margin-top: 0.2rem;">Est. Potential: ${w.potential}</div>
+                </div>
+              `).join('')}
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">*Estimated potential based on local market rates. Not guaranteed income.</div>
           </div>

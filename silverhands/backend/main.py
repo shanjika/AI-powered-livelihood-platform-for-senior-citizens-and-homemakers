@@ -550,13 +550,13 @@ def get_earnings(user_id: str):
     user = get_user(user_id)
     skills = user.get("skills") or []
     if not skills:
-        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": []}
+        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": [], "ways_to_earn": [], "skill_name": "General"}
 
     # Use ONLY primary skill (highest experience)
     primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
     name = str(primary_skill.get("name") or "Skill").strip()
     if not name:
-        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": []}
+        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": [], "ways_to_earn": [], "skill_name": "General"}
     
     amount = max(1200, int((primary_skill.get("experience_years") or 5) * 160))
     breakdown = [{
@@ -566,11 +566,31 @@ def get_earnings(user_id: str):
         "icon": "✨"
     }]
 
+    ways_to_earn = [
+        {
+            "title": f"1. Custom {name} Client Orders",
+            "potential": "₹4,000 – ₹10,000 / month",
+            "desc": f"Take direct bespoke {name.lower()} orders and customized client requests."
+        },
+        {
+            "title": f"2. Weekend {name} Workshops & Classes",
+            "potential": "₹3,000 – ₹7,000 / month",
+            "desc": f"Host small interactive workshops teaching fundamental {name.lower()} techniques."
+        },
+        {
+            "title": f"3. Community Project & Exhibition Collaborations",
+            "potential": "₹5,000 – ₹15,000 / event",
+            "desc": f"Join neighborhood collective orders and showcase your {name.lower()} creations."
+        }
+    ]
+
     return {
         "current_month": amount,
         "completed": max(0, int(amount * 0.7)),
         "pending": max(0, int(amount * 0.3)),
-        "breakdown": breakdown
+        "breakdown": breakdown,
+        "skill_name": name,
+        "ways_to_earn": ways_to_earn
     }
 
 # SilverBuddy Assistant

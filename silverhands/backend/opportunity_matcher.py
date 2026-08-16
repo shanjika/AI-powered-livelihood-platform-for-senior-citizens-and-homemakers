@@ -117,6 +117,7 @@ def recommend_collaboration_team(opportunity_id: str, target_capacity: int = 3) 
         "project_name": project_name,
         "opportunity_id": opportunity_id,
         "total_value": total_value,
+        "my_share": 6000,
         "team_income": 18000,
         "target_capacity": effective_target,
         "unit_type": "Members",

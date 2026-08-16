@@ -1052,9 +1052,9 @@ class AIEngine:
                 "target_capacity": 3,
                 "unit_type": "Members",
                 "members": [
-                  {{"name": "{user_name}", "role": "Lead {skill_name} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"}},
-                  {{"name": "Saraswathi V.", "role": "Co-Specialist in {skill_name}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}},
-                  {{"name": "Meenakshi K.", "role": "Logistics & Client Relations", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Open"}}
+                  {{"name": "{user_name}", "role": "Lead {skill_name} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed", "capacity": 1, "share": 5000}},
+                  {{"name": "Saraswathi V.", "role": "Co-Specialist in {skill_name}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted", "capacity": 1, "share": 5000}},
+                  {{"name": "Meenakshi K.", "role": "Logistics & Client Relations", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Open", "capacity": 1, "share": 5000}}
                 ]
               }}
             ]
@@ -1076,9 +1076,9 @@ class AIEngine:
                 "target_capacity": 3,
                 "unit_type": "Members",
                 "members": [
-                    {"name": user_name or "Team Lead", "role": f"Lead {clean_skill} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
-                    {"name": "Saraswathi V.", "role": f"Co-Specialist in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
-                    {"name": "Meenakshi K.", "role": "Logistics & Display Coordination", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}
+                    {"name": user_name or "Team Lead", "role": f"Lead {clean_skill} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed", "capacity": 1, "share": 6000},
+                    {"name": "Saraswathi V.", "role": f"Co-Specialist in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted", "capacity": 1, "share": 6000},
+                    {"name": "Meenakshi K.", "role": "Logistics & Display Coordination", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Accepted", "capacity": 1, "share": 6000}
                 ]
             },
             {
@@ -1091,9 +1091,9 @@ class AIEngine:
                 "target_capacity": 3,
                 "unit_type": "Instructors",
                 "members": [
-                    {"name": user_name or "Saranya", "role": f"Master Instructor in {clean_skill} (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
-                    {"name": "Rukmani Ammal", "role": f"Co-Trainer in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
-                    {"name": "Open Spot", "role": "Assistant Facilitator", "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80", "status": "Open"}
+                    {"name": user_name or "Saranya", "role": f"Master Instructor in {clean_skill} (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed", "capacity": 1, "share": 4000},
+                    {"name": "Rukmani Ammal", "role": f"Co-Trainer in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Accepted", "capacity": 1, "share": 4000},
+                    {"name": "Open Spot", "role": "Assistant Facilitator", "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80", "status": "Open", "capacity": 1, "share": 4000}
                 ]
             }
         ]
