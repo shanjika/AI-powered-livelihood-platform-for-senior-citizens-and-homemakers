@@ -113,7 +113,7 @@ class AIEngine:
 
         # 1. Gemini SDK
         if self.provider == "gemini_sdk" and self.genai_client:
-            for model_name in ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-flash-latest']:
+            for model_name in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro']:
                 try:
                     config = {'response_mime_type': 'application/json'} if json_mode else {}
                     full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
@@ -125,13 +125,13 @@ class AIEngine:
                     text = _clean_json_str(res.text)
                     return json.loads(text) if json_mode else text
                 except Exception as e:
-                    if "NOT_FOUND" in str(e):
+                    if "NOT_FOUND" in str(e) or "404" in str(e):
                         continue
                     print(f"SilverHands AI Engine Gemini SDK Error ({model_name}): {e}")
 
         # 2. Gemini REST API Fallback
         if (self.provider in ["gemini_rest", "gemini_sdk"]) and gemini_key:
-            for model_name in ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-flash-latest']:
+            for model_name in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro']:
                 try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key}"
                     payload = {
@@ -413,18 +413,23 @@ class AIEngine:
             cleaned_transcript = user_text.strip()
         
         if self.use_real_ai and cleaned_transcript:
-            sys_p = "You are SilverHands Skill Extraction Engine. Extract only the skills explicitly mentioned by the user. Ignore assistant prompts and examples."
+            sys_p = (
+                "You are SilverHands Skill Extraction Engine. Analyze the user's input and extract EACH distinct "
+                "individual skill mentioned as a separate JSON object. For example, if the user mentions "
+                "'handcrafts,gardening' or 'handcrafts and gardening', return TWO distinct skill objects: "
+                "one for Handicrafts and one for Gardening. Do NOT combine multiple skills into one name. "
+                "Do NOT output placeholder assistant text."
+            )
             user_p = f"""
             Analyze user statement: "{cleaned_transcript}"
             User Language: {lang}
 
-            Return a JSON list with only the skill(s) the user actually mentioned.
-            Do NOT include assistant questions or generic phrases.
+            Return a JSON list with each distinct skill the user mentioned as an individual object:
             [
               {{
-                "id": "unique-id",
-                "name": "Exact Skill Name (e.g. Traditional Cooking / Custom Tailoring / Math Tutoring)",
-                "category": "Cooking|Tailoring|Teaching|Gardening|Handicrafts|Services|Professional Services",
+                "id": "ext-unique",
+                "name": "Exact Skill Name (e.g. Artisan Handicrafts / Organic Gardening / Traditional Cooking)",
+                "category": "Cooking|Tailoring|Teaching|Gardening|Handicrafts|Services|Professional Services|Music & Arts",
                 "confidence": "High|Medium",
                 "experience_years": 5,
                 "proficiency": "Expert|Advanced",
@@ -438,190 +443,218 @@ class AIEngine:
             """
             llm_res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
             if isinstance(llm_res, list) and len(llm_res) > 0:
-                # Filter out any hallucinated prompt text from LLM response
                 valid_skills = []
-                for item in llm_res[:3]:
-                    name = str(item.get("name", "")).strip()
-                    if name and not any(p in name.lower() for p in ["what is the skill", "tell me", "please tell"]):
+                for item in llm_res[:4]:
+                    if isinstance(item, dict):
+                        name = str(item.get("name", "")).strip()
+                        if name and not any(p in name.lower() for p in ["what is the skill", "tell me", "please tell"]):
+                            if "id" not in item or not item["id"]:
+                                item["id"] = f"ext-{os.urandom(2).hex()}"
+                            valid_skills.append(item)
+                if valid_skills:
+                    return valid_skills
+            elif isinstance(llm_res, dict) and "skills" in llm_res and isinstance(llm_res["skills"], list):
+                valid_skills = []
+                for item in llm_res["skills"][:4]:
+                    if isinstance(item, dict) and str(item.get("name", "")).strip():
                         valid_skills.append(item)
                 if valid_skills:
                     return valid_skills
-            elif isinstance(llm_res, dict) and "skills" in llm_res:
-                return llm_res["skills"][:3]
 
-        # Dynamic Smart Natural Language Extraction Engine
+        # Dynamic Smart Natural Language Extraction Engine (Robust Multi-Skill Parser)
         lower = cleaned_transcript.lower()
         extracted = []
-        mentions_teaching = any(k in lower for k in ["teach", "tutor", "mentor", "instruct", "coach", "train", "கற்பித்தல்", "பாடம்", "மென்டோர்", "பயிற்சி", "पढ़ाना", "प्रशिक्षण"])
-
-        def keyword_hit(text: str, keywords: List[str]) -> bool:
-            text_norm = re.sub(r'[^a-z0-9\s\u0b80-\u0fff]', ' ', text.lower()).strip()
-            for key in keywords:
-                key_norm = re.sub(r'[^a-z0-9\s\u0b80-\u0fff]', ' ', key.lower()).strip()
-                if not key_norm:
-                    continue
-                if re.search(rf"(?<![a-z0-9\u0b80-\u0fff]){re.escape(key_norm)}(?![a-z0-9\u0b80-\u0fff])", text_norm):
-                    return True
-            return False
+        seen_categories = set()
 
         # Extract Experience Years dynamically if mentioned in text.
         years_match = re.search(r'(\d+)\s*(?:years?|yrs?|ஆண்டுகள்|ஆண்டு|साल)', lower)
-        exp_years = int(years_match.group(1)) if years_match else 0
+        exp_years = int(years_match.group(1)) if years_match else 10
 
-        # Domain Keyword Mappings
+        # Domain Keyword Mappings with stem and substring support
         domains = [
             {
-                "keys": ["pottery", "clay", "ceramic", "terracotta", "mold", "potter", "மண்பாண்டம்", "களிமண்", "पॉटरी"],
-                "id": "ext-craft",
-                "name": "Pottery & Clay Craft",
-                "category": "Handicrafts",
-                "confidence": "High",
-                "earning": ["Clay products sales", "Decor item orders", "Workshop classes"]
-            },
-            {
-                "keys": ["cook", "food", "snack", "sweet", "pickle", "tiffin", "baking", "bake", "catering", "சமையல்", "தின்பண்டங்கள்", "சாப்பாடு", "விருந்து", "ஊறுகாய்", "खाना", "रसोई"],
-                "id": "ext-cook",
-                "name": "Traditional Culinary & Healthy Snack Preparation",
-                "category": "Cooking",
-                "confidence": "High",
-                "earning": ["Homemade snack bulk orders", "Festival catering", "Culinary workshops", "Recipe monetization"]
-            },
-            {
-                "keys": ["tailor", "stitch", "sew", "embroider", "dress", "sari", "blouse", "bag", "தையல்", "துணி", "ஆடை", "सिलाई", "कढ़ाई"],
-                "id": "ext-tailor",
-                "name": "Custom Tailoring & Fabric Crafting",
-                "category": "Tailoring",
-                "confidence": "High",
-                "earning": ["Custom blouse & garment stitching", "Eco-friendly cloth bag bulk orders", "Tailoring classes"]
-            },
-            {
-                "keys": ["teach", "tutor", "math", "science", "english", "vedic", "student", "class", "ஆசிரியர்", "பாடம்", "கற்பித்தல்", "படிப்பு", "पढ़ाना"],
-                "id": "ext-teach",
-                "name": "Academic & Subject Mentoring",
-                "category": "Teaching",
-                "confidence": "High",
-                "earning": ["Home tuition batches", "Online conceptual coaching", "Exam preparation workshops"]
-            },
-            {
-                "keys": ["garden", "plant", "farm", "compost", "vegetable", "terrace", "தோட்டம்", "செடி", "விவசாயம்", "காய்கறி", "पौधे", "खेती"],
-                "id": "ext-garden",
-                "name": "Organic Terrace & Kitchen Gardening",
-                "category": "Gardening",
-                "confidence": "High",
-                "earning": ["Organic produce sales", "Kitchen garden consulting", "Bio-composting workshops"]
-            },
-            {
-                "keys": ["craft", "art", "paint", "pottery", "clay", "knit", "crochet", "basket", "கைவினை", "ஓவியம்", "மண்பாண்டம்", "हस्तशिल्प"],
                 "id": "ext-craft",
                 "name": "Artisan Handicrafts & Decorative Arts",
                 "category": "Handicrafts",
-                "confidence": "High",
-                "earning": ["Handcrafted item sales", "Festival decor orders", "Artisan workshops"]
+                "keys": [
+                    "handcraft", "handicraft", "craft", "pottery", "clay", "ceramic", "terracotta",
+                    "knit", "crochet", "embroidery", "basket", "origami", "candle", "soap", "decor",
+                    "art", "painting", "drawing", "கைவினை", "ஓவியம்", "மண்பாண்டம்", "களிமண்", "हस्तशिल्प", "शिल्प"
+                ],
+                "earning": ["Handcrafted item sales", "Festival decor bulk orders", "Artisan workshops"]
             },
             {
-                "keys": ["repair", "carpenter", "wood", "plumb", "fix", "electric", "மரவேலை", "பழுது", "தச்சர்", "मुरम्मत"],
+                "id": "ext-garden",
+                "name": "Organic Terrace & Kitchen Gardening",
+                "category": "Gardening",
+                "keys": [
+                    "garden", "plant", "farm", "compost", "vegetable", "terrace", "nursery", "botany", "organic",
+                    "தோட்டம்", "செடி", "விவசாயம்", "காய்கறி", "இயற்கை", "पौधे", "खेती", "बागवानी", "बगीचा"
+                ],
+                "earning": ["Organic produce & seedling sales", "Kitchen garden setup consulting", "Bio-composting workshops"]
+            },
+            {
+                "id": "ext-cook",
+                "name": "Traditional Culinary & Snack Preparation",
+                "category": "Cooking",
+                "keys": [
+                    "cook", "food", "snack", "sweet", "pickle", "tiffin", "baking", "bake", "catering",
+                    "culinary", "chef", "recipe", "masala", "சமையல்", "தின்பண்டங்கள்", "சாப்பாடு", "விருந்து", "ஊறுகாய்",
+                    "खाना", "रसोई", "पाककला", "मिठाई", "अचार"
+                ],
+                "earning": ["Homemade snack bulk orders", "Festival catering", "Culinary masterclasses", "Recipe monetization"]
+            },
+            {
+                "id": "ext-tailor",
+                "name": "Custom Tailoring & Fabric Crafting",
+                "category": "Tailoring",
+                "keys": [
+                    "tailor", "stitch", "sew", "embroider", "dress", "sari", "saree", "blouse", "bag", "garment",
+                    "தையல்", "துணி", "ஆடை", "தையற்கலை", "सिलाई", "कढ़ाई", "कपड़े"
+                ],
+                "earning": ["Custom blouse & garment stitching", "Eco-friendly cloth bag bulk orders", "Tailoring classes"]
+            },
+            {
+                "id": "ext-teach",
+                "name": "Academic & Subject Tutoring",
+                "category": "Teaching",
+                "keys": [
+                    "teach", "tutor", "tuition", "math", "science", "physics", "chemistry", "biology", "english",
+                    "vedic", "student", "class", "ஆசிரியர்", "பாடம்", "கற்பித்தல்", "படிப்பு", "படிப்பித்தல்", "पढ़ाना", "ट्यूशन", "शिक्षण"
+                ],
+                "earning": ["Home tuition batches", "Online conceptual coaching", "Exam preparation workshops"]
+            },
+            {
+                "id": "ext-music",
+                "name": "Music, Vocal & Performing Arts",
+                "category": "Music & Arts",
+                "keys": [
+                    "music", "sing", "vocal", "carnatic", "instrument", "veena", "violin", "flute", "keyboard", "guitar", "dance", "bharatanatyam",
+                    "பாட்டு", "சங்கீதம்", "நடனம்", "இசை", "संगीत", "गायन", "नृत्य"
+                ],
+                "earning": ["Private music & vocal lessons", "Community cultural performances", "Online instrument coaching"]
+            },
+            {
                 "id": "ext-repair",
-                "name": "Handyman Craft & Home Repair Services",
+                "name": "Home Repair & Handyman Services",
                 "category": "Services",
-                "confidence": "High",
-                "earning": ["Local repair consultations", "Woodworking crafts", "Community maintenance"]
+                "keys": [
+                    "repair", "carpenter", "wood", "plumb", "fix", "electric", "appliance", "maintenance",
+                    "மரவேலை", "பழுது", "தச்சர்", "மின்னியல்", "मुरम्मत", "प्लंबर", "बढ़ई"
+                ],
+                "earning": ["Local repair consultations", "Woodworking crafts", "Community maintenance contracts"]
             },
             {
-                "keys": ["care", "child", "elder", "nursing", "baby", "yoga", "health", "குழந்தை", "யோகா", "பராமரிப்பு"],
                 "id": "ext-care",
                 "name": "Wellness Guidance & Home Caregiving",
                 "category": "Services",
-                "confidence": "High",
-                "earning": ["After-school daycare support", "Elderly companionship", "Yoga instruction"]
+                "keys": [
+                    "care", "child", "elder", "nursing", "baby", "yoga", "health", "wellness", "ayurveda",
+                    "குழந்தை", "யோகா", "பராமரிப்பு", "மருத்துவம்", "देखभाल", "योग", "स्वास्थ्य"
+                ],
+                "earning": ["After-school daycare support", "Elderly companionship", "Yoga & wellness guidance"]
             },
             {
-                "keys": ["account", "data", "bookkeep", "admin", "office", "கணக்கு", "மின்னஞ்சல்", "खाता"],
                 "id": "ext-account",
-                "name": "Home & Small Business Bookkeeping",
+                "name": "Small Business Bookkeeping & Digital Support",
                 "category": "Professional Services",
-                "confidence": "High",
-                "earning": ["Small business accounting", "Data entry assistance", "Financial guidance"]
+                "keys": [
+                    "account", "data", "bookkeep", "admin", "office", "excel", "typing", "translation", "translate", "writing",
+                    "கணக்கு", "மின்னஞ்சல்", "விவரப் பதிவு", "மொழிபெயர்ப்பு", "खाता", "टाइपिंग", "अनुवाद"
+                ],
+                "earning": ["Small business bookkeeping", "Data entry & document assistance", "Content translation"]
             }
         ]
 
-        # Scan transcript for domain matches
-        matched_domains = []
-        for d in domains:
-            if keyword_hit(lower, d["keys"]):
-                matched_domains.append(d)
+        def check_text_for_domain(text: str, domain_obj: Dict[str, Any]) -> bool:
+            text_lower = text.lower()
+            for key in domain_obj["keys"]:
+                k = key.lower().strip()
+                if not k:
+                    continue
+                # Match full word or stem/substring in clean words
+                if k in text_lower:
+                    return True
+            return False
 
-        for d in matched_domains[:2]:
-            extracted.append({
-                "id": f"{d['id']}-{os.urandom(2).hex()}",
-                "name": d["name"],
-                "category": d["category"],
-                "confidence": d["confidence"],
-                "experience_years": exp_years if exp_years else 10,
-                "proficiency": "Expert",
-                "can_teach": True,
-                "can_collaborate": True,
-                "preferred_work": "Home / Local",
-                "reasoning": f"Extracted directly from user statement: '{cleaned_transcript[:80]}'",
-                "earning_paths": d["earning"]
-            })
+        # Split user transcript into individual segments (handling comma, and, +, etc.)
+        delimiters_pattern = r'[,;\n\r/&+]|\band\b|\bplus\b|\balso\b|\bwith\b|\bas well as\b|\bமற்றும்\b|\bஅத்துடன்\b|\bऔर\b|\bतथा\b|\bమరియు\b|\bಮತ್ತು\b|\bകൂടാതെ\b'
+        segments = [s.strip() for s in re.split(delimiters_pattern, cleaned_transcript, flags=re.IGNORECASE) if s.strip()]
+        if not segments:
+            segments = [cleaned_transcript]
 
-            if mentions_teaching and d["category"] != "Teaching":
+        # 1. Process each segment to extract individual skills (standard domains or custom skills)
+        matched_domain_ids = set()
+        for seg in segments:
+            clean_seg = re.sub(r'[^\w\s\u0b80-\u0fff]', ' ', seg).strip()
+            clean_seg = re.sub(r'\s+', ' ', clean_seg)
+            if not clean_seg or len(clean_seg) < 2:
+                continue
+            if clean_seg.lower() in ["i", "am", "good", "at", "know", "best", "years", "my", "skill", "skills", "can", "do"]:
+                continue
+
+            # Check if this specific segment matches a known domain
+            matched_d = None
+            for d in domains:
+                if check_text_for_domain(clean_seg, d):
+                    matched_d = d
+                    break
+
+            if matched_d:
+                if matched_d["id"] not in matched_domain_ids:
+                    matched_domain_ids.add(matched_d["id"])
+                    seen_categories.add(matched_d["category"])
+                    extracted.append({
+                        "id": f"{matched_d['id']}-{os.urandom(2).hex()}",
+                        "name": matched_d["name"],
+                        "category": matched_d["category"],
+                        "confidence": "High",
+                        "experience_years": exp_years,
+                        "proficiency": "Expert",
+                        "can_teach": True,
+                        "can_collaborate": True,
+                        "preferred_work": "Home / Local Community",
+                        "reasoning": f"Identified individual skill from user input: '{seg}'",
+                        "earning_paths": matched_d["earning"]
+                    })
+            else:
+                # Custom individual skill specified by the user
+                topic = clean_seg.title()
                 extracted.append({
-                    "id": f"{d['id']}-teach-{os.urandom(2).hex()}",
-                    "name": f"{d['name']} Instructor & Mentor",
-                    "category": "Teaching",
-                    "confidence": "Medium",
-                    "experience_years": max(0, exp_years - 5) if exp_years else 5,
-                    "proficiency": "Advanced",
+                    "id": f"ext-custom-{os.urandom(2).hex()}",
+                    "name": topic,
+                    "category": "Services & Crafts",
+                    "confidence": "High",
+                    "experience_years": exp_years,
+                    "proficiency": "Expert",
                     "can_teach": True,
                     "can_collaborate": True,
-                    "preferred_work": "Workshops / Online",
-                    "reasoning": "Transferable leadership skill derived from practical expertise.",
-                    "earning_paths": [f"Weekend {d['category'].lower()} workshops", "Online masterclasses"]
+                    "preferred_work": "Home / Local Community",
+                    "reasoning": f"Identified specialization directly from user statement: '{seg}'",
+                    "earning_paths": [f"{topic} direct client orders", f"Local {topic} workshops", "Community orders"]
                 })
 
-        if len(extracted) > 2:
-            extracted = extracted[:2]
+        # 2. Fallback full-text domain check if segments didn't catch all mentioned domains
+        if len(extracted) == 0:
+            for d in domains:
+                if check_text_for_domain(lower, d) and d["id"] not in matched_domain_ids:
+                    matched_domain_ids.add(d["id"])
+                    extracted.append({
+                        "id": f"{d['id']}-{os.urandom(2).hex()}",
+                        "name": d["name"],
+                        "category": d["category"],
+                        "confidence": "High",
+                        "experience_years": exp_years,
+                        "proficiency": "Expert",
+                        "can_teach": True,
+                        "can_collaborate": True,
+                        "preferred_work": "Home / Local Community",
+                        "reasoning": f"Identified skill from user input: '{cleaned_transcript[:70]}'",
+                        "earning_paths": d["earning"]
+                    })
 
-        # If no standard keywords matched, extract custom dynamic skill directly from the user's sentence!
-        if not extracted:
-            clean_text = re.sub(r'[^\w\s]', '', cleaned_transcript).strip()
-            # Remove duplicated words
-            words = clean_text.split()
-            seen_words = []
-            for w in words:
-                if w.lower() not in [sw.lower() for sw in seen_words]:
-                    seen_words.append(w)
-            topic = " ".join(seen_words[:6]).title() if seen_words else "Custom Practical Expertise"
-
-            extracted.append({
-                "id": f"ext-custom-{os.urandom(2).hex()}",
-                "name": f"{topic}",
-                "category": "Services & Crafts",
-                "confidence": "High",
-                "experience_years": exp_years if exp_years else 10,
-                "proficiency": "Expert",
-                "can_teach": True,
-                "can_collaborate": True,
-                "preferred_work": "Home / Local Community",
-                "reasoning": f"Identified custom specialization directly from user input: '{cleaned_transcript}'",
-                "earning_paths": ["Direct client orders", "Local workshops", "Community projects"]
-            })
-            extracted.append({
-                "id": f"ext-custom-teach-{os.urandom(2).hex()}",
-                "name": f"{topic} Workshop Instructor",
-                "category": "Teaching",
-                "confidence": "Medium",
-                "experience_years": max(0, exp_years - 5) if exp_years else 5,
-                "proficiency": "Advanced",
-                "can_teach": True,
-                "can_collaborate": True,
-                "preferred_work": "Online / Local",
-                "reasoning": "Hidden transferable skill: Capability to guide and teach younger generations.",
-                "earning_paths": ["Skill masterclasses", "Group mentoring"]
-            })
-
-        return extracted
+        # Limit to max 4 distinct extracted skills
+        return extracted[:4]
 
     def generate_class(self, prompt: str, user_name: str, lang: str = "ta", user_skills: Optional[List[str]] = None) -> Dict[str, Any]:
         """Dynamically generates complete class structure, title, curriculum, fees, and schedule based on the user's actual confirmed skills."""
@@ -754,25 +787,217 @@ class AIEngine:
 
         # Dynamic Fallback Post Generator
         topic = prompt.strip() if prompt.strip() else "Share Your Experience"
+        img_url = self.generate_skill_image(topic, topic)
 
         if lang == "ta":
             return {
                 "headline": f"✨ {topic[:35]} - சிறப்பு வாய்ப்பு! 🌾",
                 "content": f"வணக்கம் நண்பர்களே! {topic} குறித்து புதிய அறிவிப்பை பகிர்வதில் மகிழ்ச்சியடைகிறேன். நீங்கள் இதில் இணைய விரும்பினால் உடனடியாக தொடர்பு கொள்ளவும்! 📞",
-                "hashtags": "#SilverHands #TamilArtisans #SkillSharing #CommunityWork"
+                "hashtags": "#SilverHands #TamilArtisans #SkillSharing #CommunityWork",
+                "image_url": img_url
             }
         elif lang == "hi":
             return {
                 "headline": f"✨ {topic[:35]} - विशेष अवसर! 🌾",
                 "content": f"नमस्ते दोस्तों! {topic} के बारे में यह जानकारी साझा करते हुए मुझे खुशी हो रही है। अधिक जानकारी या जुड़ने के लिए संपर्क करें! 📞",
-                "hashtags": "#SilverHands #Skills #CommunityWork #Artisan"
+                "hashtags": "#SilverHands #Skills #CommunityWork #Artisan",
+                "image_url": img_url
             }
         else:
             return {
                 "headline": f"✨ {topic[:40]} - Community Update! 🌟",
                 "content": f"Hello friends! I am excited to share a new update regarding {topic}. Learn, collaborate, and grow with the SilverHands ecosystem. Connect today!",
-                "hashtags": "#SilverHands #LivelihoodPlatform #SeniorSkills #CommunityArtisans"
+                "hashtags": "#SilverHands #LivelihoodPlatform #SeniorSkills #CommunityArtisans",
+                "image_url": img_url
             }
+
+    def generate_skill_image(self, skill_name: str, topic: str = "", category: str = "") -> str:
+        """Generates dynamic visual artwork for the specified skill using Gemini AI with rich SVG visual fallback."""
+        s_name = (skill_name or topic or "Skill Discovery").strip()
+        s_lower = s_name.lower()
+        top = (topic or s_name).strip()
+
+        # Check category styling theme
+        theme = {
+            "bg_start": "#0f172a",
+            "bg_mid": "#1e293b",
+            "bg_end": "#334155",
+            "accent": "#f59e0b",
+            "accent_glow": "rgba(245, 158, 11, 0.4)",
+            "icon": "✨",
+            "badge": "Specialized Skill"
+        }
+
+        if any(k in s_lower for k in ["garden", "plant", "farm", "compost", "vegetable", "botany", "தோட்டம்", "செடி", "बागवानी"]):
+            theme = {
+                "bg_start": "#064e3b",
+                "bg_mid": "#047857",
+                "bg_end": "#10b981",
+                "accent": "#6ee7b7",
+                "accent_glow": "rgba(110, 231, 183, 0.5)",
+                "icon": "🌱",
+                "badge": "Organic Gardening & Farming"
+            }
+        elif any(k in s_lower for k in ["craft", "handicraft", "pottery", "clay", "art", "paint", "origami", "candle", "soap", "கைவினை", "हस्तशिल्प"]):
+            theme = {
+                "bg_start": "#78350f",
+                "bg_mid": "#b45309",
+                "bg_end": "#d97706",
+                "accent": "#fde68a",
+                "accent_glow": "rgba(253, 230, 138, 0.5)",
+                "icon": "🎨",
+                "badge": "Artisan Craft & Handicrafts"
+            }
+        elif any(k in s_lower for k in ["cook", "food", "snack", "sweet", "pickle", "bake", "baking", "catering", "chef", "சமையல்", "खाना"]):
+            theme = {
+                "bg_start": "#881337",
+                "bg_mid": "#c2410c",
+                "bg_end": "#ea580c",
+                "accent": "#fed7aa",
+                "accent_glow": "rgba(254, 215, 170, 0.5)",
+                "icon": "🍳",
+                "badge": "Traditional Culinary & Cooking"
+            }
+        elif any(k in s_lower for k in ["tailor", "stitch", "sew", "embroider", "dress", "sari", "blouse", "தையல்", "सिलाई"]):
+            theme = {
+                "bg_start": "#4c1d95",
+                "bg_mid": "#6d28d9",
+                "bg_end": "#9333ea",
+                "accent": "#e9d5ff",
+                "accent_glow": "rgba(233, 213, 255, 0.5)",
+                "icon": "🧵",
+                "badge": "Custom Tailoring & Fashion"
+            }
+        elif any(k in s_lower for k in ["teach", "tutor", "tuition", "math", "science", "english", "vedic", "படிப்பு", "पढ़ाना"]):
+            theme = {
+                "bg_start": "#1e3a8a",
+                "bg_mid": "#2563eb",
+                "bg_end": "#0284c7",
+                "accent": "#bae6fd",
+                "accent_glow": "rgba(186, 230, 253, 0.5)",
+                "icon": "👩‍🏫",
+                "badge": "Academic Mentoring & Tutoring"
+            }
+        elif any(k in s_lower for k in ["music", "sing", "dance", "vocal", "violin", "veena", "இசை", "संगीत"]):
+            theme = {
+                "bg_start": "#701a75",
+                "bg_mid": "#a21caf",
+                "bg_end": "#c026d3",
+                "accent": "#fbcfe8",
+                "accent_glow": "rgba(251, 207, 232, 0.5)",
+                "icon": "🎵",
+                "badge": "Performing Arts & Music"
+            }
+        elif any(k in s_lower for k in ["repair", "plumb", "electric", "carpenter", "wood", "பழுது", "मुरम्मत"]):
+            theme = {
+                "bg_start": "#1f2937",
+                "bg_mid": "#374151",
+                "bg_end": "#4b5563",
+                "accent": "#93c5fd",
+                "accent_glow": "rgba(147, 197, 253, 0.5)",
+                "icon": "🛠️",
+                "badge": "Home Services & Repair"
+            }
+        elif any(k in s_lower for k in ["care", "elder", "child", "yoga", "wellness", "பராமரிப்பு", "योग"]):
+            theme = {
+                "bg_start": "#0f766e",
+                "bg_mid": "#0d9488",
+                "bg_end": "#14b8a6",
+                "accent": "#a7f3d0",
+                "accent_glow": "rgba(167, 243, 208, 0.5)",
+                "icon": "🧘",
+                "badge": "Wellness & Caregiving"
+            }
+
+        if category:
+            theme["badge"] = category
+
+        # Try Gemini AI SVG visual generation if available
+        if self.use_real_ai:
+            sys_p = "You are SilverHands Visual Studio AI. Return ONLY a single valid raw <svg ...>...</svg> banner for the requested skill. No markdown wrappers or explanation."
+            user_p = f"""
+            Skill: "{s_name}"
+            Topic: "{top}"
+            Category: "{theme['badge']}"
+            Primary Colors: {theme['bg_start']} to {theme['bg_end']}, Accent: {theme['accent']}
+
+            Return an 800x450 SVG starting with <svg width="800" height="450" viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg"> and ending with </svg>.
+            Include aesthetic gradients, subtle vector illustration shapes, an icon, the category badge, and bold text for "{s_name}".
+            """
+            try:
+                raw_svg = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=False)
+                if raw_svg and isinstance(raw_svg, str) and "<svg" in raw_svg and "</svg>" in raw_svg:
+                    start_idx = raw_svg.find("<svg")
+                    end_idx = raw_svg.rfind("</svg>") + 6
+                    svg_content = raw_svg[start_idx:end_idx].strip()
+                    import urllib.parse
+                    encoded = urllib.parse.quote(svg_content)
+                    return f"data:image/svg+xml;utf8,{encoded}"
+            except Exception as e:
+                print(f"Gemini SVG generation fallback: {e}")
+
+        # Ultra-Clean, High-DPI Dynamic SVG Generator Fallback
+        title_display = s_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")[:40]
+        topic_display = top.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")[:55]
+        badge_display = theme["badge"].replace("&", "&amp;")
+
+        svg = f"""<svg width="800" height="450" viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="{theme['bg_start']}"/>
+      <stop offset="50%" stop-color="{theme['bg_mid']}"/>
+      <stop offset="100%" stop-color="{theme['bg_end']}"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.4)"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="30" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="450" fill="url(#bgGrad)"/>
+
+  <!-- Glowing Ambient Decorative Orbs -->
+  <circle cx="700" cy="80" r="160" fill="{theme['accent']}" opacity="0.25" filter="url(#glow)"/>
+  <circle cx="100" cy="380" r="140" fill="{theme['bg_mid']}" opacity="0.5" filter="url(#glow)"/>
+  <circle cx="400" cy="225" r="220" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1.5"/>
+  <circle cx="400" cy="225" r="320" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1.5" stroke-dasharray="8 8"/>
+
+  <!-- Glassmorphism Main Content Panel -->
+  <rect x="50" y="50" width="700" height="350" rx="24" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+
+  <!-- Skill Category Badge -->
+  <rect x="90" y="90" width="{len(badge_display) * 9 + 40}" height="36" rx="18" fill="rgba(0,0,0,0.35)" stroke="{theme['accent']}" stroke-width="1.5"/>
+  <text x="110" y="114" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="{theme['accent']}">{badge_display}</text>
+
+  <!-- Giant Thematic Emoji/Icon -->
+  <text x="630" y="180" font-size="90" text-anchor="middle" opacity="0.9">{theme['icon']}</text>
+
+  <!-- Skill Title -->
+  <text x="90" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="800" fill="#ffffff" letter-spacing="-0.5">
+    {title_display}
+  </text>
+
+  <!-- Topic / Tagline -->
+  <text x="90" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="400" fill="rgba(255,255,255,0.85)">
+    {topic_display}
+  </text>
+
+  <!-- Footer Platform Branding Badge -->
+  <line x1="90" y1="285" x2="710" y2="285" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <rect x="90" y="315" width="32" height="32" rx="8" fill="{theme['accent']}"/>
+  <text x="106" y="337" font-family="sans-serif" font-size="18" text-anchor="middle" font-weight="900" fill="#0f172a">S</text>
+  <text x="135" y="337" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700" fill="#ffffff">SilverHands Creator Studio</text>
+  <text x="690" y="337" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="{theme['accent']}" text-anchor="end">AI Generated Visual • 4K HD</text>
+</svg>"""
+
+        import urllib.parse
+        encoded_svg = urllib.parse.quote(svg.strip())
+        return f"data:image/svg+xml;utf8,{encoded_svg}"
 
     def generate_video_metadata(self, video_title: str, lang: str = "ta") -> Dict[str, Any]:
         """Dynamically generates video metadata, tags, and bilingual subtitles derived from video title."""

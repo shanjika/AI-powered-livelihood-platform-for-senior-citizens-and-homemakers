@@ -108,6 +108,11 @@ class PostGenerateRequest(BaseModel):
     prompt: str
     lang: str = "ta"
 
+class ImageGenerateRequest(BaseModel):
+    skill_name: str
+    topic: Optional[str] = ""
+    category: Optional[str] = ""
+
 class SilverBuddyRequest(BaseModel):
     query: str
     user_id: str = "u-lakshmi-64"
@@ -474,41 +479,54 @@ def get_videos(user_id: Optional[str] = Query(None)):
         if not skills:
             return []
         
-        # Use ONLY primary skill (highest experience)
+        # Use primary skill (highest experience)
         primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
-        skill_name = str(primary_skill.get("name") or "").strip().lower()
-        if not skill_name:
+        skill_name = str(primary_skill.get("name") or "").strip()
+        skill_name_lower = skill_name.lower()
+        if not skill_name_lower:
             return []
 
         filtered = []
         for v in vids:
             title = str(v.get("title") or "").lower()
             category = str(v.get("category") or "").lower()
-            if skill_name in title or skill_name in category:
-                filtered.append(v)
+            if skill_name_lower in title or skill_name_lower in category:
+                v_copy = dict(v)
+                if not v_copy.get("thumbnail") or "unsplash.com" in str(v_copy.get("thumbnail")):
+                    v_copy["thumbnail"] = ai_service.generate_skill_image(skill_name, v.get("title"), v.get("category"))
+                filtered.append(v_copy)
         if filtered:
             return filtered
 
-        # Generate only for primary skill
-        meta = ai_service.generate_video_metadata(primary_skill.get("name"), user.get("language", "ta"))
+        # Generate dynamically tailored for primary skill
+        meta = ai_service.generate_video_metadata(skill_name, user.get("language", "ta"))
+        dynamic_img = ai_service.generate_skill_image(skill_name, meta.get("title") or f"{skill_name} Masterclass", meta.get("category") or skill_name)
         return [{
             "id": f"skill-video-{os.urandom(3).hex()}",
-            "title": meta.get("title") or f"{primary_skill.get('name')} tutorial",
+            "title": meta.get("title") or f"Practical {skill_name} Tutorial & Masterclass",
             "author": user.get("name", "User"),
-            "category": meta.get("category") or primary_skill.get("name"),
+            "category": meta.get("category") or skill_name,
             "language": user.get("language", "ta"),
-            "views": 124,
-            "watch_time_hours": 8,
-            "followers": 320,
-            "estimated_earning": 180,
-            "thumbnail": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80",
+            "views": 480,
+            "watch_time_hours": 18,
+            "followers": 520,
+            "estimated_earning": 650,
+            "thumbnail": dynamic_img,
             "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
             "tags": json.dumps(meta.get("tags", [])),
             "subtitles_ta": meta.get("subtitles_ta", ""),
             "subtitles_en": meta.get("subtitles_en", "")
         }]
 
-    return vids
+    # Format list with dynamic AI skill images
+    result_vids = []
+    for v in vids:
+        v_copy = dict(v)
+        v_cat = v.get("category") or v.get("title") or "Artisan Skills"
+        if not v_copy.get("thumbnail") or "unsplash.com" in str(v_copy.get("thumbnail")):
+            v_copy["thumbnail"] = ai_service.generate_skill_image(v_cat, v.get("title"), v_cat)
+        result_vids.append(v_copy)
+    return result_vids
 
 @app.post("/api/videos/upload")
 def upload_video(req: VideoUploadRequest):
@@ -516,17 +534,19 @@ def upload_video(req: VideoUploadRequest):
     conn = get_db()
     cursor = conn.cursor()
     vid_id = f"vid-{os.urandom(4).hex()}"
+    cat = meta.get("category") or req.category
+    dynamic_img = ai_service.generate_skill_image(cat, req.title, cat)
     new_vid = {
         "id": vid_id,
         "title": meta["title"],
         "author": req.author,
-        "category": meta["category"],
+        "category": cat,
         "language": req.lang,
         "views": 1,
         "watch_time_hours": 1,
         "followers": 850,
         "estimated_earning": 150,
-        "thumbnail": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80",
+        "thumbnail": dynamic_img,
         "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
         "tags": json.dumps(meta["tags"]),
         "subtitles_ta": meta["subtitles_ta"],
@@ -542,7 +562,15 @@ def upload_video(req: VideoUploadRequest):
 
 @app.post("/api/posts/generate")
 def generate_post(req: PostGenerateRequest):
-    return ai_service.generate_post(req.prompt, req.lang)
+    post = ai_service.generate_post(req.prompt, req.lang)
+    if "image_url" not in post or not post["image_url"]:
+        post["image_url"] = ai_service.generate_skill_image(req.prompt, req.prompt)
+    return post
+
+@app.post("/api/images/generate")
+def generate_image(req: ImageGenerateRequest):
+    img_url = ai_service.generate_skill_image(req.skill_name, req.topic, req.category)
+    return {"image_url": img_url, "skill_name": req.skill_name}
 
 # Earnings & Income Recommendation
 @app.get("/api/earnings/{user_id}")

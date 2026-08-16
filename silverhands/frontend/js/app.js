@@ -18,32 +18,31 @@ class SilverHandsApp {
     if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
       window.SkillCardsComponent.clearExtractedSkills();
     }
-    const savedUserId = localStorage.getItem("silverhands_user_id");
-    if (savedUserId) {
-      await this.loadUserProfile(savedUserId);
-      if (this.userProfile && Array.isArray(this.userProfile.skills) && this.userProfile.skills.length > 0) {
-        this.currentView = "dashboard";
-      } else {
-        this.currentView = "onboarding";
-      }
-    } else {
-      this.currentView = "auth";
-    }
+    
+    // Always open directly on the login page every time opening/refreshing
+    this.currentView = "auth";
+    this.userProfile = null;
+    localStorage.removeItem("silverhands_user_id");
 
-    // Load initial data components only when a real user session exists
-    const loadTasks = [
+    // Load public components
+    await Promise.all([
       window.CollaborationComponent.loadCollaborations(),
       window.ClassesComponent.loadClasses(),
-      window.ContentComponent.loadVideos(),
       window.AdminComponent.loadStats()
-    ];
-    if (this.userProfile && this.userProfile.id) {
-      loadTasks.unshift(window.RadarComponent.loadOpportunities());
-      loadTasks.push(window.EarningsComponent.loadEarnings());
-    }
-    await Promise.all(loadTasks);
+    ]);
 
     document.addEventListener("languageChanged", () => this.render());
+    this.render();
+  }
+
+  logout() {
+    this.userProfile = null;
+    localStorage.removeItem("silverhands_user_id");
+    this.navigationHistory = [];
+    if (window.SkillCardsComponent && typeof window.SkillCardsComponent.clearExtractedSkills === "function") {
+      window.SkillCardsComponent.clearExtractedSkills();
+    }
+    this.currentView = "auth";
     this.render();
   }
 
@@ -173,8 +172,8 @@ class SilverHandsApp {
             <div style="font-size: 0.9rem; font-weight: 700; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main);">
               ${u.name}
             </div>
-            <button class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; border-color: var(--secondary); color: var(--secondary);" onclick="window.app.navigate('auth')" title="Switch or Login Account">
-              🔄 Switch
+            <button class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; border-color: #f87171; color: #f87171;" onclick="window.app.logout()" title="Logout">
+              🚪 Logout
             </button>
           </div>
         </div>
