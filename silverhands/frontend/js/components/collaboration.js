@@ -49,7 +49,7 @@ window.CollaborationComponent = {
               </div>
 
               <!-- AI Assembled Team Members -->
-              <h3 style="margin: 1.2rem 0 0.8rem 0; color: var(--primary);">🤖 AI Assembled Team Members (5/5)</h3>
+              <h3 style="margin: 1.2rem 0 0.8rem 0; color: var(--primary);">🤖 AI Assembled Team Members (${(c.members || []).length}/${c.target_capacity || (c.members || []).length})</h3>
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
                 ${(c.members || []).map(m => `
                   <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--surface-border); border-radius: var(--radius-md); padding: 1rem; display: flex; align-items: center; gap: 0.9rem;">

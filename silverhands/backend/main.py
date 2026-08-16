@@ -96,6 +96,7 @@ class ClassCreateRequest(BaseModel):
     prompt: str
     user_name: str = "Lakshmi Ammal"
     lang: str = "ta"
+    user_skills: List[str] = []
 
 class VideoUploadRequest(BaseModel):
     title: str
@@ -330,8 +331,12 @@ def match_opportunities(user_id: str):
     if not skills:
         return []
 
+    # Use ONLY primary skill (highest experience)
     primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0)) if skills else None
-    skill_name = primary_skill.get("name") if primary_skill else ""
+    if not primary_skill:
+        return []
+    
+    skill_name = primary_skill.get("name") or ""
     user_name = user.get("name", "Community Member")
     location = user.get("location_name") or user.get("district") or "Chennai"
 
@@ -343,6 +348,14 @@ def match_opportunities(user_id: str):
 
     matched = []
     for opp in opps:
+        # Filter STRICTLY to primary skill only
+        opp_category = str(opp.get("category") or "").lower()
+        opp_title = str(opp.get("title") or "").lower()
+        skill_lower = skill_name.lower()
+        
+        if skill_lower not in opp_category and skill_lower not in opp_title:
+            continue
+        
         score = calculate_match_score(user, opp)
         if score > 0:
             opp["match_score"] = score
@@ -353,7 +366,7 @@ def match_opportunities(user_id: str):
             opp["distance_km"] = haversine_distance(u_lat, u_lon, o_lat, o_lon)
             matched.append(opp)
 
-    # Generate AI-tailored opportunities if DB doesn't contain matching jobs for custom skill
+    # Generate AI-tailored opportunities ONLY for primary skill
     if not matched and skill_name:
         matched = ai_service.generate_skill_opportunities(user_name, skill_name, location)
 
@@ -366,12 +379,18 @@ def get_collaborations(user_id: Optional[str] = Query(None)):
     if user_id:
         user = get_user(user_id)
         skills = user.get("skills") or []
-        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0)) if skills else None
+        if not skills:
+            return []
+        
+        # Use ONLY primary skill (highest experience)
+        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
         if primary_skill and primary_skill.get("name"):
             skill_name = primary_skill.get("name")
             user_name = user.get("name", "Community Member")
             location = user.get("location_name") or user.get("district") or "Chennai"
-            return ai_service.generate_skill_collaborations(user_name, skill_name, location)
+            # Return only the first collaboration (primary skill only)
+            collabs = ai_service.generate_skill_collaborations(user_name, skill_name, location)
+            return collabs[:1] if collabs else []
 
     conn = get_db()
     cursor = conn.cursor()
@@ -386,17 +405,46 @@ def recommend_collaboration(opportunity_id: str = Body(..., embed=True)):
 
 # Classes & Booking
 @app.get("/api/classes")
-def get_classes():
+def get_classes(user_id: Optional[str] = Query(None)):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM classes")
     cls = cursor.fetchall()
     conn.close()
+
+    if user_id:
+        user = get_user(user_id)
+        skills = user.get("skills") or []
+        if not skills:
+            return []
+        
+        # Use ONLY primary skill (highest experience)
+        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
+        skill_name = str(primary_skill.get("name") or "").strip().lower()
+        if not skill_name:
+            return []
+
+        filtered = []
+        for c in cls:
+            title = str(c.get("title") or "").lower()
+            category = str(c.get("category") or "").lower()
+            if skill_name in title or skill_name in category:
+                filtered.append(c)
+        if filtered:
+            return filtered
+
+        # Generate only for primary skill
+        generated_class = ai_service.generate_class(f"I want to teach a beginner-friendly {primary_skill.get('name')} class.", user.get("name", "User"), user.get("language", "ta"), [primary_skill.get("name")])
+        generated_class["id"] = f"skill-class-{os.urandom(3).hex()}"
+        generated_class["enrolled_count"] = 0
+        generated_class["max_students"] = 12
+        return [generated_class]
+
     return cls
 
 @app.post("/api/classes/create")
 def create_class(req: ClassCreateRequest):
-    generated = ai_service.generate_class(req.prompt, req.user_name, req.lang)
+    generated = ai_service.generate_class(req.prompt, req.user_name, req.lang, req.user_skills)
     conn = get_db()
     cursor = conn.cursor()
     cls_id = f"cls-{os.urandom(4).hex()}"
@@ -413,12 +461,53 @@ def create_class(req: ClassCreateRequest):
 
 # Video & Content Studio
 @app.get("/api/videos")
-def get_videos():
+def get_videos(user_id: Optional[str] = Query(None)):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM videos")
     vids = cursor.fetchall()
     conn.close()
+
+    if user_id:
+        user = get_user(user_id)
+        skills = user.get("skills") or []
+        if not skills:
+            return []
+        
+        # Use ONLY primary skill (highest experience)
+        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
+        skill_name = str(primary_skill.get("name") or "").strip().lower()
+        if not skill_name:
+            return []
+
+        filtered = []
+        for v in vids:
+            title = str(v.get("title") or "").lower()
+            category = str(v.get("category") or "").lower()
+            if skill_name in title or skill_name in category:
+                filtered.append(v)
+        if filtered:
+            return filtered
+
+        # Generate only for primary skill
+        meta = ai_service.generate_video_metadata(primary_skill.get("name"), user.get("language", "ta"))
+        return [{
+            "id": f"skill-video-{os.urandom(3).hex()}",
+            "title": meta.get("title") or f"{primary_skill.get('name')} tutorial",
+            "author": user.get("name", "User"),
+            "category": meta.get("category") or primary_skill.get("name"),
+            "language": user.get("language", "ta"),
+            "views": 124,
+            "watch_time_hours": 8,
+            "followers": 320,
+            "estimated_earning": 180,
+            "thumbnail": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80",
+            "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            "tags": json.dumps(meta.get("tags", [])),
+            "subtitles_ta": meta.get("subtitles_ta", ""),
+            "subtitles_en": meta.get("subtitles_en", "")
+        }]
+
     return vids
 
 @app.post("/api/videos/upload")
@@ -458,8 +547,31 @@ def generate_post(req: PostGenerateRequest):
 # Earnings & Income Recommendation
 @app.get("/api/earnings/{user_id}")
 def get_earnings(user_id: str):
-    from seed_data import INITIAL_EARNINGS
-    return INITIAL_EARNINGS
+    user = get_user(user_id)
+    skills = user.get("skills") or []
+    if not skills:
+        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": []}
+
+    # Use ONLY primary skill (highest experience)
+    primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
+    name = str(primary_skill.get("name") or "Skill").strip()
+    if not name:
+        return {"current_month": 0, "completed": 0, "pending": 0, "breakdown": []}
+    
+    amount = max(1200, int((primary_skill.get("experience_years") or 5) * 160))
+    breakdown = [{
+        "source": name,
+        "amount": amount,
+        "percentage": 100,
+        "icon": "✨"
+    }]
+
+    return {
+        "current_month": amount,
+        "completed": max(0, int(amount * 0.7)),
+        "pending": max(0, int(amount * 0.3)),
+        "breakdown": breakdown
+    }
 
 # SilverBuddy Assistant
 @app.post("/api/silverbuddy/query")

@@ -64,24 +64,43 @@ window.SilverBuddyComponent = {
     this.messages.push({ role: 'user', text: queryText });
     this.updateChatUI();
 
-    const res = await fetch("/api/silverbuddy/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: queryText,
-        user_id: window.app.userProfile.id || "u-lakshmi-64",
-        lang: window.i18n.currentLang
-      })
-    });
-    const data = await res.json();
-    this.messages.push({ role: 'ai', text: data.answer });
-    window.audioEngine.speak(data.answer, window.i18n.currentLang);
-    this.updateChatUI();
+    const userProfile = window.app && window.app.userProfile ? window.app.userProfile : null;
+    const userId = (userProfile && userProfile.id) || localStorage.getItem("silverhands_user_id") || "u-lakshmi-64";
 
-    // Trigger app navigation if requested by assistant
-    if (data.action === "navigate_earnings") window.app.navigate("earnings");
-    if (data.action === "navigate_classes") window.app.navigate("classes");
-    if (data.action === "navigate_radar") window.app.navigate("radar");
+    try {
+      const res = await fetch("/api/silverbuddy/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: queryText,
+          user_id: userId,
+          lang: window.i18n && window.i18n.currentLang ? window.i18n.currentLang : "en"
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`SilverBuddy request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const answer = data && data.answer ? data.answer : "I can help you with earnings, classes, or nearby opportunities.";
+      this.messages.push({ role: 'ai', text: answer });
+      if (window.audioEngine && typeof window.audioEngine.speak === "function") {
+        window.audioEngine.speak(answer, window.i18n && window.i18n.currentLang ? window.i18n.currentLang : "en");
+      }
+      this.updateChatUI();
+
+      if (data && data.action === "navigate_earnings" && window.app) window.app.navigate("earnings");
+      if (data && data.action === "navigate_classes" && window.app) window.app.navigate("classes");
+      if (data && data.action === "navigate_radar" && window.app) window.app.navigate("radar");
+    } catch (error) {
+      console.warn("SilverBuddy query failed:", error);
+      this.messages.push({
+        role: 'ai',
+        text: "I’m unable to reach the assistant right now, but you can still explore nearby opportunities, masterclasses, and earnings from the dashboard."
+      });
+      this.updateChatUI();
+    }
   },
 
   updateChatUI() {

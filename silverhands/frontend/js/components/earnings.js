@@ -22,13 +22,32 @@ window.EarningsComponent = {
   },
 
   render() {
-    if (!this.data) return `<div class="card">Loading earnings...</div>`;
+    const user = window.app && window.app.userProfile ? window.app.userProfile : null;
+    const skills = user && Array.isArray(user.skills) ? user.skills : [];
+
+    if (!this.data || !user || !skills.length) {
+      return `
+        <div class="animate-fade-in" style="max-width: 760px; margin: 2rem auto; text-align: center;">
+          <div class="card" style="border: 2px dashed var(--secondary); background: rgba(13,148,136,0.08);">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">💰</div>
+            <h1 class="brand-font" style="color: var(--primary); margin-bottom: 0.8rem;">No income summary yet</h1>
+            <p style="color: var(--text-muted); font-size: 1.05rem; margin-bottom: 1.5rem;">
+              Add and confirm your skills to unlock your real income summary and skill-based earning opportunities.
+            </p>
+            <button class="btn btn-primary btn-lg" onclick="window.app.navigate('onboarding')">
+              ✨ Add My Skills
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     const d = this.data;
 
     return `
       <div class="animate-fade-in">
         <h1 class="brand-font" style="color: var(--primary); margin-bottom: 0.5rem;">💰 ${window.i18n.t("earnings")}</h1>
-        <p style="color: var(--text-muted); margin-bottom: 2rem;">Track your income across all skill services, classes, content, and team collaborations.</p>
+        <p style="color: var(--text-muted); margin-bottom: 2rem;">Your income summary for your confirmed skill profile.</p>
 
         <!-- Income Summary Cards -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem;">

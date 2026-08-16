@@ -623,18 +623,23 @@ class AIEngine:
 
         return extracted
 
-    def generate_class(self, prompt: str, user_name: str, lang: str = "ta") -> Dict[str, Any]:
-        """Dynamically generates complete class structure, title, curriculum, fees, and schedule based on user's exact prompt."""
+    def generate_class(self, prompt: str, user_name: str, lang: str = "ta", user_skills: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Dynamically generates complete class structure, title, curriculum, fees, and schedule based on the user's actual confirmed skills."""
+        user_skill_names = []
+        if isinstance(user_skills, list):
+            user_skill_names = [str(skill).strip() for skill in user_skills if str(skill).strip()]
+
         if self.use_real_ai and prompt:
-            sys_p = "You are SilverHands Class Creation Engine. Generate complete class details from the instructor's prompt."
+            sys_p = "You are SilverHands Class Creation Engine. Generate complete class details from the instructor's prompt and their confirmed skill profile."
             user_p = f"""
             Instructor Name: {user_name}
+            Confirmed Skills: {json.dumps(user_skill_names)}
             Class Proposal Prompt: "{prompt}"
             Language: {lang}
 
             Return JSON:
             {{
-                "title": "Catchy Masterclass Title",
+                "title": "Catchy Masterclass Title aligned to the user's confirmed skill",
                 "instructor": "{user_name}",
                 "category": "Cooking|Tailoring|Teaching|Gardening|Handicrafts|Services|Music|Arts",
                 "fee": 850,
@@ -642,7 +647,7 @@ class AIEngine:
                 "schedule": "10:00 AM - 11:30 AM",
                 "mode": "Hybrid (Online Zoom + Kitchen/Home Workshop)",
                 "max_students": 15,
-                "description": "Comprehensive class description...",
+                "description": "Comprehensive class description using the user's actual skill domain...",
                 "curriculum": [
                     "Session 1: Detailed topic",
                     "Session 2: Detailed topic",
@@ -655,34 +660,61 @@ class AIEngine:
             if llm_res and "title" in llm_res:
                 return llm_res
 
-        # Dynamic Fallback Class Generator derived directly from prompt
+        # Dynamic Fallback Class Generator derived directly from prompt and user skill context
         prompt_clean = prompt.strip()
-        topic = re.sub(r'^(?:i want to teach|i can teach|class for|want to host)\s*', '', prompt_clean, flags=re.IGNORECASE).capitalize()
+        topic = re.sub(r'^(?:i want to teach|i can teach|class for|want to host|teach)\s*', '', prompt_clean, flags=re.IGNORECASE).strip()
         if not topic:
-            topic = "Traditional Skills Masterclass"
+            topic = user_skill_names[0] if user_skill_names else "Traditional Skills Masterclass"
 
-        # Determine Category
         topic_lower = topic.lower()
-        if any(k in topic_lower for k in ["cook", "food", "snack", "pickle", "bake", "sweet", "சமையல்", "தின்பண்டங்கள்"]):
+        skill_hint = None
+        for skill in user_skill_names:
+            s = skill.lower()
+            if any(k in s for k in ["cook", "food", "snack", "pickle", "bake", "sweet", "சமையல்", "தின்பண்டங்கள்"]):
+                skill_hint = "Cooking"; break
+            if any(k in s for k in ["tailor", "stitch", "sew", "embroider", "dress", "sari", "தையல்"]):
+                skill_hint = "Tailoring"; break
+            if any(k in s for k in ["garden", "plant", "farm", "compost", "தோட்டம்", "செடி"]):
+                skill_hint = "Gardening"; break
+            if any(k in s for k in ["math", "science", "english", "tutor", "teach", "education", "படிப்பு", "பாடம்", "கற்பித்தல்"]):
+                skill_hint = "Teaching"; break
+            if any(k in s for k in ["music", "guitar", "sing", "art", "paint", "craft", "ஓவியம்", "இசை", "கைவினை", "களிமண்", "மண்பாண்டம்"]):
+                skill_hint = "Music & Arts"; break
+            if any(k in s for k in ["pottery", "clay", "terracotta", "ceramic", "handicraft", "artisan", "களிமண்", "மண்பாண்டம்", "கைவினை"]):
+                skill_hint = "Handicrafts"; break
+
+        if skill_hint:
+            category = skill_hint
+        elif any(k in topic_lower for k in ["cook", "food", "snack", "pickle", "bake", "sweet", "சமையல்", "தின்பண்டங்கள்"]):
             category = "Cooking"
-            fee = 800
         elif any(k in topic_lower for k in ["tailor", "stitch", "sew", "embroider", "dress", "sari", "தையல்"]):
             category = "Tailoring"
-            fee = 950
         elif any(k in topic_lower for k in ["garden", "plant", "farm", "compost", "தோட்டம்", "செடி"]):
             category = "Gardening"
-            fee = 700
-        elif any(k in topic_lower for k in ["math", "science", "english", "tutor", "teach", "படிப்பு", "பாடம்"]):
+        elif any(k in topic_lower for k in ["math", "science", "english", "tutor", "teach", "படிப்பு", "பாடம்", "கற்பித்தல்"]):
             category = "Teaching"
-            fee = 1000
-        elif any(k in topic_lower for k in ["music", "guitar", "sing", "art", "paint", "craft", "ஓவியம்", "இசை"]):
+        elif any(k in topic_lower for k in ["music", "guitar", "sing", "art", "paint", "craft", "ஓவியம்", "இசை", "கைவினை", "களிமண்", "மண்பாண்டம்"]):
             category = "Music & Arts"
+        else:
+            category = "Handicrafts"
+
+        if skill_hint == "Teaching":
+            fee = 1000
+        elif category == "Cooking":
+            fee = 800
+        elif category == "Tailoring":
+            fee = 950
+        elif category == "Gardening":
+            fee = 700
+        elif category == "Music & Arts":
             fee = 1200
         else:
-            category = "Artisan Crafts & Skills"
             fee = 850
 
         title = f"{topic} Masterclass" if "class" not in topic_lower else topic.title()
+        if user_skill_names:
+            skill_topic = user_skill_names[0]
+            title = f"{skill_topic} Masterclass"
 
         return {
             "title": title,
@@ -693,12 +725,12 @@ class AIEngine:
             "schedule": "10:00 AM - 11:30 AM",
             "mode": "Hybrid (Online Zoom + Local Workshop)",
             "max_students": 12,
-            "description": f"Join {user_name} for a hands-on, practical masterclass on {topic}. Designed for beginners and enthusiasts using time-tested methods.",
+            "description": f"Join {user_name} for a practical {category.lower()} masterclass based on their confirmed skill in {user_skill_names[0] if user_skill_names else topic}. Designed for beginners and aspiring learners.",
             "curriculum": [
-                f"Session 1: Fundamentals & Essential Ingredients/Tools for {topic[:25]}",
-                f"Session 2: Step-by-Step Techniques & Moisture/Quality Control",
-                f"Session 3: Advanced Spicing, Customization & Finishing Touches",
-                f"Session 4: Packaging, Commercial Tips & Student QA Session"
+                f"Session 1: Fundamentals & Foundations for {user_skill_names[0] if user_skill_names else topic[:25]}",
+                f"Session 2: Step-by-Step Practice & Safety/Quality Checks",
+                f"Session 3: Advanced Techniques & Personal Tips",
+                f"Session 4: Packaging, Client Communication & Q&A"
             ]
         }
 
@@ -796,6 +828,9 @@ class AIEngine:
 
     def silverbuddy_query(self, query: str, user_profile: Dict[str, Any], lang: str = "ta") -> Dict[str, Any]:
         """SilverBuddy Voice & Text AI Assistant derived dynamically from user's query and profile."""
+        if not isinstance(user_profile, dict):
+            user_profile = {}
+
         if self.use_real_ai and query:
             sys_p = "You are SilverBuddy, a supportive voice & text AI companion for seniors and homemakers on SilverHands platform."
             user_p = f"""
@@ -814,28 +849,42 @@ class AIEngine:
                 return llm_res
 
         # Dynamic Fallback Assistant
-        q_lower = query.lower()
+        q_lower = (query or "").strip().lower()
         user_name = user_profile.get("name", "Friend")
-        skills_str = ", ".join([s.get("name", "") for s in user_profile.get("skills", [])]) or "your domain expertise"
+        skills = user_profile.get("skills") or []
+        skill_names = []
+        for skill in skills:
+            if isinstance(skill, dict):
+                name = skill.get("name")
+                if name:
+                    skill_names.append(name)
+            elif isinstance(skill, str):
+                skill_names.append(skill)
+        skills_str = ", ".join(skill_names) if skill_names else "your skills"
 
-        if any(k in q_lower for k in ["earn", "money", "income", "சம்பாதிக்க", "பணம்", "कमाई"]):
+        if any(k in q_lower for k in ["earn", "money", "income", "salary", "payment", "profit", "சம்பாதிக்க", "பணம்", "कमाई", "कमाना"]):
             return {
-                "answer": f"Hello {user_name}! Based on your skills ({skills_str}), you can earn through: 1) Direct Customer Orders, 2) Conducting Masterclasses, and 3) Content Monetization. Opening your Earnings Dashboard!",
+                "answer": f"Hello {user_name}! Based on your skills in {skills_str}, the fastest ways to earn are: 1) taking local customer orders, 2) teaching a short masterclass, and 3) creating simple content or tutorials. You can start today by opening the Earnings dashboard.",
                 "action": "navigate_earnings"
             }
-        elif any(k in q_lower for k in ["class", "teach", "course", "வகுப்பு", "பாடம்", "क्लास"]):
+        elif any(k in q_lower for k in ["class", "teach", "course", "training", "workshop", "வகுப்பு", "பாடம்", "क्लास", "शिक्षक", "प्रशिक्षण"]):
             return {
-                "answer": f"Great news {user_name}! You can publish and teach masterclasses based on {skills_str}. Taking you to your Classes & Teaching page!",
+                "answer": f"Great idea, {user_name}! Your experience in {skills_str} is valuable for teaching. You can create a beginner-friendly class, share your methods, and earn from every student who joins. I can open the Classes page for you.",
                 "action": "navigate_classes"
             }
-        elif any(k in q_lower for k in ["work", "job", "opportunity", "radar", "வாய்ப்பு", "வேலை", "काम"]):
+        elif any(k in q_lower for k in ["work", "job", "opportunity", "radar", "gig", "service", "வாய்ப்பு", "வேலை", "काम", "सेवा", "नौकरी"]):
             return {
-                "answer": f"I checked nearby opportunities matching {skills_str}! Opening Opportunity Radar for you.",
+                "answer": f"I checked the nearby opportunities that match {skills_str}. You can start with local orders, community requests, and skill-based jobs that fit your experience. Opening the Opportunity Radar now.",
                 "action": "navigate_radar"
+            }
+        elif not q_lower:
+            return {
+                "answer": f"Hello {user_name}! Ask me anything about earning, classes, nearby jobs, or how to grow your skills in {skills_str}.",
+                "action": "none"
             }
         else:
             return {
-                "answer": f"Hello {user_name}! I am SilverBuddy. I parsed your query: '{query}'. How would you like me to assist you with your skills in {skills_str} today?",
+                "answer": f"Hello {user_name}! Based on your experience in {skills_str}, a good next step is to start with local orders, teach a class, or explore nearby opportunities. If you want, I can help you find the best option for your goals.",
                 "action": "none"
             }
 
@@ -1019,17 +1068,17 @@ class AIEngine:
         return [
             {
                 "id": "collab-dyn-1",
-                "project_name": f"{loc} {clean_skill} Artisan Collective",
+                "project_name": f"Community {clean_skill} Collective & Exhibition Project",
                 "opportunity_id": "opp-dyn-3",
                 "total_value": 18000,
                 "my_share": 6000,
-                "status": "Active Team Collaboration",
+                "status": "Recruiting Team Members",
                 "target_capacity": 3,
                 "unit_type": "Members",
                 "members": [
-                    {"name": user_name, "role": f"Lead {clean_skill} Expert (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
-                    {"name": "Saraswathi V.", "role": f"Senior {clean_skill} Partner", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
-                    {"name": "Meenakshi K.", "role": "Packaging & Quality Coordinator", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}
+                    {"name": user_name or "Team Lead", "role": f"Lead {clean_skill} Specialist (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
+                    {"name": "Saraswathi V.", "role": f"Co-Specialist in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
+                    {"name": "Meenakshi K.", "role": "Logistics & Display Coordination", "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=150&q=80", "status": "Accepted"}
                 ]
             },
             {
@@ -1042,7 +1091,7 @@ class AIEngine:
                 "target_capacity": 3,
                 "unit_type": "Instructors",
                 "members": [
-                    {"name": user_name, "role": f"Master Instructor in {clean_skill} (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
+                    {"name": user_name or "Saranya", "role": f"Master Instructor in {clean_skill} (You)", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Confirmed"},
                     {"name": "Rukmani Ammal", "role": f"Co-Trainer in {clean_skill}", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", "status": "Accepted"},
                     {"name": "Open Spot", "role": "Assistant Facilitator", "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80", "status": "Open"}
                 ]
