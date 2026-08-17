@@ -12,6 +12,7 @@ window.ContentComponent = {
   activePostModal: null,
   activeVideoModal: null,
   activeSkillFilter: 'all',
+  publishedPosts: [],
 
   async loadVideos() {
     const user = window.app && window.app.userProfile ? window.app.userProfile : null;
@@ -143,6 +144,25 @@ window.ContentComponent = {
 
     const skillName = primarySkill.name || 'Your Skill';
     const skillListNames = skills.map(s => s.name || s);
+    const communityPosts = this.publishedPosts.length ? this.publishedPosts.map(post => `
+      <div class="card" style="display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <img src="${(window.app && window.app.userProfile && window.app.userProfile.avatar_url) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80'}" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
+          <div>
+            <div style="font-weight: 700; color: var(--text-main);">${post.author || 'You'}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">${post.skillName || 'Community post'}</div>
+          </div>
+        </div>
+        <img src="${post.image_url || this.getSkillImage(post.skillName || skillName, post.skillName || skillName)}" alt="${post.skillName || 'community post'}" style="width: 100%; height: 180px; object-fit: cover; border-radius: var(--radius-md);">
+        <h4 style="color: var(--text-main); margin: 0;">${post.headline}</h4>
+        <p style="color: var(--text-muted); margin: 0; line-height: 1.5;">${post.content}</p>
+        <div style="color: var(--secondary); font-weight: 700; font-size: 0.9rem;">${post.hashtags}</div>
+      </div>
+    `).join('') : `
+      <div class="card" style="padding: 1.2rem; text-align: center; color: var(--text-muted);">
+        No community posts yet. Publish your first AI-generated post to share your skill with the community.
+      </div>
+    `;
 
     return `
       <div class="animate-fade-in">
@@ -311,6 +331,13 @@ window.ContentComponent = {
         `}
 
         ${this.renderVideoModalHtml()}
+        <div style="margin-top: 2.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--primary);">🌍 Community Showcase</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+            ${communityPosts}
+          </div>
+        </div>
+
         ${this.renderPostModalHtml()}
       </div>
     `;
@@ -439,7 +466,7 @@ window.ContentComponent = {
             <button class="btn btn-outline" onclick="navigator.clipboard.writeText('${p.headline.replace(/'/g, "\\'")}\\n\\n${p.content.replace(/'/g, "\\'")}\\n\\n${p.hashtags.replace(/'/g, "\\'")}'); alert('📋 Post text copied to clipboard!')">
               📋 Copy Caption
             </button>
-            <button class="btn btn-primary" onclick="window.ContentComponent.closePostModal(); alert('🚀 Social Post published to Community Showcase!')">
+            <button class="btn btn-primary" onclick="window.ContentComponent.publishCurrentPost()">
               🚀 Publish to Community
             </button>
           </div>
@@ -544,9 +571,27 @@ window.ContentComponent = {
     }
   },
 
+  publishCurrentPost() {
+    if (!this.activePostModal) return;
+
+    const post = {
+      id: `community-${Date.now()}`,
+      author: (window.app && window.app.userProfile && window.app.userProfile.name) || 'You',
+      headline: this.activePostModal.headline,
+      content: this.activePostModal.content,
+      hashtags: this.activePostModal.hashtags,
+      image_url: this.activePostModal.image_url,
+      skillName: this.activePostModal.skillName || 'Community Skill'
+    };
+
+    this.publishedPosts.unshift(post);
+    this.closePostModal();
+    alert('🚀 Social Post published to Community Showcase!');
+  },
+
   closePostModal() {
     this.activePostModal = null;
-    window.app.render();
+    if (window.app) window.app.render();
   },
 
   async openUploadModal(category) {

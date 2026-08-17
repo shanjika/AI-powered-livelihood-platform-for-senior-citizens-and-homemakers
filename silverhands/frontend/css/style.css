@@ -412,6 +412,20 @@ h3 { font-size: var(--font-h3); }
   font-size: 1.05rem;
 }
 
+.language-select,
+.language-select option {
+  background: #ffffff;
+  color: #111827;
+}
+
+.language-select {
+  border: 1px solid var(--surface-border);
+  border-radius: 20px;
+  padding: 0.4rem 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Badges & Pills */
 .badge {
   display: inline-flex;

@@ -151,9 +151,12 @@ window.OnboardingComponent = {
 
             <canvas id="waveform-canvas" class="waveform-canvas" width="400" height="100"></canvas>
 
-            <div style="display: flex; justify-content: center; gap: 1rem;">
+            <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
               <button id="mic-btn" class="btn btn-primary btn-lg" onclick="window.OnboardingComponent.toggleMic()">
                 🎙️ Start Speaking
+              </button>
+              <button class="btn btn-secondary btn-lg" onclick="window.OnboardingComponent.sendAnswer()">
+                ➤ Send
               </button>
             </div>
           </div>

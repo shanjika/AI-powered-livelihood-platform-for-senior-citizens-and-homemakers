@@ -169,7 +169,7 @@ class SilverHandsApp {
           <button class="btn btn-outline" style="padding: 0.4rem; border-radius: 50%; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-color: var(--surface-border); margin-right: 0.5rem;" onclick="window.app.navigate('admin')" title="Admin Dashboard">
             ⚙️
           </button>
-          <select style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid var(--surface-border); border-radius: 20px; padding: 0.4rem 0.8rem; font-weight: 600; cursor: pointer;" onchange="window.i18n.setLanguage(this.value)">
+          <select class="language-select" onchange="window.i18n.setLanguage(this.value)">
             <option value="ta" ${window.i18n.currentLang==='ta'?'selected':''}>தமிழ் (Tamil)</option>
             <option value="hi" ${window.i18n.currentLang==='hi'?'selected':''}>हिंदी (Hindi)</option>
             <option value="te" ${window.i18n.currentLang==='te'?'selected':''}>తెలుగు (Telugu)</option>
