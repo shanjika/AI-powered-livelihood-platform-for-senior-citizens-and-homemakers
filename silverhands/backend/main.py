@@ -98,6 +98,16 @@ class ClassCreateRequest(BaseModel):
     lang: str = "ta"
     user_skills: List[str] = []
 
+class OpportunityCreateRequest(BaseModel):
+    title: str
+    category: str
+    company: str
+    location_name: str
+    experience: str
+    expected_earning: int
+    time: str
+    contact: str
+
 class VideoUploadRequest(BaseModel):
     title: str
     category: str = "Traditional Cooking"
@@ -317,6 +327,44 @@ def save_skills(req: SkillSaveRequest):
     return {"status": "success", "saved": len(req.skills)}
 
 # Opportunities & Radar
+@app.post("/api/opportunities/create")
+def create_opportunity(req: OpportunityCreateRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    opp_id = f"opp-{os.urandom(4).hex()}"
+    description = f"Company: {req.company}\nExperience: {req.experience}\nContact: {req.contact}"
+    
+    new_opp = {
+        "id": opp_id,
+        "title": req.title,
+        "category": req.category,
+        "location_name": req.location_name,
+        "latitude": 13.0, # Default or could be geocoded
+        "longitude": 80.2,
+        "distance_km": 0.0,
+        "date": "Ongoing",
+        "time": req.time,
+        "expected_earning": req.expected_earning,
+        "individual_earning": req.expected_earning,
+        "work_type": "Full-time",
+        "match_score": 0,
+        "required_skills": "",
+        "description": description,
+        "collaborative_project": 0,
+        "target_team_size": 1
+    }
+    
+    cursor.execute("""
+    INSERT INTO opportunities (id, title, category, location_name, latitude, longitude, distance_km, date, time, expected_earning, individual_earning, work_type, match_score, required_skills, description, collaborative_project, target_team_size)
+    VALUES (:id, :title, :category, :location_name, :latitude, :longitude, :distance_km, :date, :time, :expected_earning, :individual_earning, :work_type, :match_score, :required_skills, :description, :collaborative_project, :target_team_size)
+    """, new_opp)
+    
+    conn.commit()
+    conn.close()
+    
+    return {"status": "success", "opportunity": new_opp}
+
 @app.get("/api/opportunities")
 def get_opportunities(category: Optional[str] = None):
     conn = get_db()
