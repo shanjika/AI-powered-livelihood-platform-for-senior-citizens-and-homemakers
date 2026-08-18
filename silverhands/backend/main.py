@@ -107,6 +107,7 @@ class OpportunityCreateRequest(BaseModel):
     expected_earning: int
     time: str
     contact: str
+    description: str
 
 class VideoUploadRequest(BaseModel):
     title: str
@@ -333,7 +334,7 @@ def create_opportunity(req: OpportunityCreateRequest):
     cursor = conn.cursor()
     
     opp_id = f"opp-{os.urandom(4).hex()}"
-    description = f"Company: {req.company}\nExperience: {req.experience}\nContact: {req.contact}"
+    description = f"{req.description}\n\nCompany: {req.company}\nExperience: {req.experience}\nContact: {req.contact}"
     
     new_opp = {
         "id": opp_id,

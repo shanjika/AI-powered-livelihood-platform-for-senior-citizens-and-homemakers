@@ -190,6 +190,9 @@ class SilverHandsApp {
         <button class="nav-tab ${this.currentView==='radar'?'active':''}" onclick="window.app.navigate('radar')">
           📍 Nearby Jobs
         </button>
+        <button class="nav-tab ${this.currentView==='post_job'?'active':''}" onclick="window.app.navigate('post_job')">
+          💼 Post Opportunity
+        </button>
         <button class="nav-tab ${this.currentView==='collaboration'?'active':''}" onclick="window.app.navigate('collaboration')">
           🤝 Collaborations
         </button>
@@ -231,6 +234,8 @@ class SilverHandsApp {
         return window.ContentComponent.render();
       case "earnings":
         return window.EarningsComponent.render();
+      case "post_job":
+        return window.PostJobComponent.render();
       case "admin":
         return window.AdminComponent.render();
       default:
