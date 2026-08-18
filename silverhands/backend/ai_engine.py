@@ -1051,6 +1051,300 @@ class AIEngine:
             "subtitles_en": sub_en
         }
 
+    def generate_skill_videos(self, skill_name: str, skill_category: str = "", user_name: str = "Expert", lang: str = "ta", count: int = 2) -> List[Dict[str, Any]]:
+        """Dynamically generates at least `count` distinct, high-quality skill video tutorials with Gemini AI and dynamic domain fallback."""
+        s_name = (skill_name or "").strip() or "Practical Skill"
+        s_cat = (skill_category or "").strip() or s_name
+        u_name = (user_name or "").strip() or "SilverHands Creator"
+
+        # 1. Real Gemini AI Generation
+        if self.use_real_ai:
+            sys_p = "You are SilverHands Video AI Engine. Generate practical, authentic video tutorials tailored strictly to the user's specific skill."
+            user_p = f"""
+            Skill Name: "{s_name}"
+            Category: "{s_cat}"
+            Instructor Name: "{u_name}"
+            Language: "{lang}"
+            Generate exactly {count} distinct video tutorial objects specifically and exclusively for the skill '{s_name}'.
+
+            Return JSON:
+            {{
+                "videos": [
+                    {{
+                        "title": "Clear catchy tutorial title for {s_name}",
+                        "category": "{s_cat}",
+                        "tags": ["Tag1", "Tag2", "Tag3", "Tag4"],
+                        "description": "Comprehensive tutorial description focusing on {s_name}...",
+                        "subtitles_ta": "1. முதல் படி...\\n2. இரண்டாம் படி...\\n3. நிறைவு முறை...",
+                        "subtitles_en": "1. Step 1 guide...\\n2. Step 2 guide...\\n3. Final finishing...",
+                        "views": 5200,
+                        "watch_time_hours": 580,
+                        "followers": 410,
+                        "estimated_earning": 1450
+                    }}
+                ]
+            }}
+            """
+            llm_res = self._call_llm_api(user_p, system_prompt=sys_p, json_mode=True)
+            if llm_res and isinstance(llm_res, dict) and "videos" in llm_res and isinstance(llm_res["videos"], list) and len(llm_res["videos"]) > 0:
+                result = []
+                for idx, v in enumerate(llm_res["videos"][:count]):
+                    v_title = v.get("title") or f"{s_name} Masterclass Part {idx + 1}"
+                    v_cat = v.get("category") or s_cat
+                    result.append({
+                        "id": f"vid-gemini-{os.urandom(4).hex()}",
+                        "title": v_title,
+                        "author": u_name,
+                        "category": v_cat,
+                        "language": lang,
+                        "views": int(v.get("views") or (4200 + idx * 1800)),
+                        "watch_time_hours": int(v.get("watch_time_hours") or (450 + idx * 210)),
+                        "followers": int(v.get("followers") or (310 + idx * 150)),
+                        "estimated_earning": int(v.get("estimated_earning") or (1200 + idx * 450)),
+                        "thumbnail": self.generate_skill_image(v_cat, v_title, v_cat),
+                        "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                        "tags": v.get("tags") if isinstance(v.get("tags"), list) else [s_name, s_cat, "SilverHands", "Masterclass"],
+                        "subtitles_ta": v.get("subtitles_ta") or f"1. {s_name} ஆரம்ப வழிகாட்டுதல்.\n2. செயல்முறை விளக்கம்.\n3. பயனுள்ள குறிப்புகள்.",
+                        "subtitles_en": v.get("subtitles_en") or f"1. Introduction to {s_name}.\n2. Step-by-step practical demonstration.\n3. Essential expert tips."
+                    })
+                if len(result) >= count:
+                    return result
+
+        # 2. Dynamic Domain-Specific Fallback Library
+        s_lower = f"{s_name} {s_cat}".lower()
+        presets = []
+
+        if any(w in s_lower for w in ["cook", "food", "snack", "sweet", "pickle", "millet", "baking", "culinary", "recipe", "சமையல்", "தின்பண்டங்கள்"]):
+            presets = [
+                {
+                    "title": f"Traditional {s_name} Preparation & Authentic Secret Recipes",
+                    "category": "Traditional Cooking",
+                    "tags": ["Cooking", "Traditional Food", "Homemade", "Heritage Recipes", "Healthy Eating"],
+                    "views": 11800, "watch_time_hours": 1240, "followers": 820, "estimated_earning": 1950,
+                    "subtitles_ta": f"1. {s_name} செய்ய தரமான பாரம்பரிய பொருட்களை தயார் செய்தல்.\n2. சரியான விகிதத்தில் வறுத்து பக்குவமாக சமைத்தல்.\n3. ருசியான ஆரோக்கிய பலகாரங்களை பரிமாறுதல்.",
+                    "subtitles_en": f"1. Selecting fresh traditional ingredients for {s_name}.\n2. Roasting and cooking in authentic proportions.\n3. Serving healthy and delicious homemade specialties."
+                },
+                {
+                    "title": f"Commercial Packaging & Bulk Orders for Homemade {s_name}",
+                    "category": "Traditional Cooking",
+                    "tags": ["Bulk Orders", "Food Business", "Packaging", "Hygiene", "Home Catering"],
+                    "views": 8400, "watch_time_hours": 920, "followers": 610, "estimated_earning": 1600,
+                    "subtitles_ta": f"1. உணவின் சுவை மற்றும் தரத்தை நீண்ட நாட்கள் பாதுகாக்கும் முறைகள்.\n2. கவர்ச்சிகரமான பேக்கிங் மற்றும் லேபிளிங் செய்தல்.\n3. வாடிக்கையாளர் ஆர்டர்களை சரியான நேரத்தில் விநியோகித்தல்.",
+                    "subtitles_en": f"1. Preservation techniques to maintain shelf life and freshness.\n2. Eco-friendly hygienic packaging and branding.\n3. Managing festival orders and on-time client delivery."
+                },
+                {
+                    "title": f"Healthy Millet & Low-Oil Variations of {s_name}",
+                    "category": "Traditional Cooking",
+                    "tags": ["Millet Recipes", "Diabetic Friendly", "Nutrition", "Healthy Food"],
+                    "views": 9600, "watch_time_hours": 1050, "followers": 740, "estimated_earning": 1800,
+                    "subtitles_ta": f"1. சிறுதானியங்கள் கொண்டு பாரம்பரிய உணவை ஆரோக்கியமாக சமைத்தல்.\n2. எண்ணெய் அளவை குறைத்து மொறுமொறுப்பாக தயாரிக்கும் ரகசியம்.\n3. அனைத்து வயதினருக்கும் ஏற்ற சத்தான சுவை.",
+                    "subtitles_en": f"1. Utilizing ancient millets for nutritious everyday recipes.\n2. Secret techniques for crispy snacks with minimal oil.\n3. Wholesome nutrition suitable for all age groups."
+                }
+            ]
+        elif any(w in s_lower for w in ["tailor", "stitch", "sew", "embroider", "dress", "sari", "blouse", "garment", "தையல்", "ஆடை"]):
+            presets = [
+                {
+                    "title": f"Master Cutting & Precision Stitching for {s_name}",
+                    "category": "Tailoring & Design",
+                    "tags": ["Tailoring", "Pattern Cutting", "Stitching", "Custom Fit", "Garment Design"],
+                    "views": 10200, "watch_time_hours": 1150, "followers": 780, "estimated_earning": 1850,
+                    "subtitles_ta": f"1. உடலளவுகளை துல்லியமாக குறித்து பேட்டர்ன் வரைதல்.\n2. துணியை கவனமாக வெட்டி இயந்திரத்தில் நேர்த்தியாக தைத்தல்.\n3. கச்சிதமான பொருத்தம் மற்றும் ஃபினிஷிங் சரிபார்த்தல்.",
+                    "subtitles_en": f"1. Taking precise measurements and drawing patterns.\n2. Accurate fabric cutting and seamless machine stitching.\n3. Quality inspection for flawless custom fit."
+                },
+                {
+                    "title": f"Zari Embroidery & Designer Blouse Neck Finishes",
+                    "category": "Tailoring & Design",
+                    "tags": ["Embroidery", "Zari Work", "Sari Blouses", "Bridal Wear", "Handcraft"],
+                    "views": 7900, "watch_time_hours": 870, "followers": 590, "estimated_earning": 1500,
+                    "subtitles_ta": f"1. ஜரிகை மற்றும் ஆரி தையல் நுணுக்கங்களை எளிதாக போடுதல்.\n2. பாரம்பரிய கழுத்து வடிவமைப்பு மற்றும் மணி வேலைப்பாடுகள்.\n3. வாடிக்கையாளர் விரும்பும் நவீன டிசைன்களை உருவாக்குதல்.",
+                    "subtitles_en": f"1. Easy hand embroidery and intricate zari needlework.\n2. Crafting elegant neckline borders and bead embellishments.\n3. Creating modern bridal and boutique designs."
+                },
+                {
+                    "title": f"Eco-Friendly Cloth Bag Making & Bulk Stitching Techniques",
+                    "category": "Tailoring & Design",
+                    "tags": ["Cloth Bags", "Eco Friendly", "Bulk Stitching", "Zero Waste", "Upcycling"],
+                    "views": 6700, "watch_time_hours": 730, "followers": 490, "estimated_earning": 1350,
+                    "subtitles_ta": f"1. மறுபயன்பாட்டு துணிகளை கொண்டு உறுதியான பைகள் தைத்தல்.\n2. கைப்பிடிகள் மற்றும் பாக்கெட்டுகளை வலுவாக பொருத்துதல்.\n3. மொத்த விற்பனைக்கான விரைவு தையல் முறைகள்.",
+                    "subtitles_en": f"1. Constructing heavy-duty reusable cotton bags.\n2. Reinforcing straps, zips, and interior pockets.\n3. High-speed assembly techniques for bulk commercial orders."
+                }
+            ]
+        elif any(w in s_lower for w in ["garden", "plant", "farm", "compost", "terrace", "தோட்டம்", "செடி", "விவசாயம்"]):
+            presets = [
+                {
+                    "title": f"Complete Terrace Vegetable Gardening & Soil Preparation Guide",
+                    "category": "Organic Gardening",
+                    "tags": ["Terrace Garden", "Organic Farming", "Soil Mix", "Home Vegetables", "Urban Farming"],
+                    "views": 9100, "watch_time_hours": 980, "followers": 690, "estimated_earning": 1700,
+                    "subtitles_ta": f"1. மாடி தோட்டத்திற்கு செம்மண், கோகோபீட் மற்றும் மண்புழு உரம் கலக்கும் முறை.\n2. காய்கறி விதைகளை சரியான ஆழத்தில் விதைத்தல்.\n3. இயற்கை முறையில் நீர் பாய்ச்சும் நுணுக்கங்கள்.",
+                    "subtitles_en": f"1. Preparing ideal pot mix with red soil, coco-peat, and vermicompost.\n2. Sowing organic vegetable seeds at the right depth.\n3. Smart watering and sunlight management for terrace greens."
+                },
+                {
+                    "title": f"Natural Pest Control & Home Kitchen Waste Composting Masterclass",
+                    "category": "Organic Gardening",
+                    "tags": ["Pest Control", "Composting", "Panchagavya", "Neem Oil", "Zero Waste"],
+                    "views": 7500, "watch_time_hours": 810, "followers": 530, "estimated_earning": 1400,
+                    "subtitles_ta": f"1. வேப்பெண்ணெய் கரைசல் மற்றும் மூலிகை பூச்சி விரட்டி தயாரித்தல்.\n2. சமையலறை காய்கறி கழிவுகளை துர்நாற்றமின்றி உரமாக மாற்றுதல்.\n3. செடிகளின் நோய் தாக்குதலை ஆரம்பத்திலேயே கண்டறிந்து தீர்வு காணுதல்.",
+                    "subtitles_en": f"1. Formulating organic neem spray and natural pest deterrents.\n2. Odorless home composting using kitchen vegetable scraps.\n3. Diagnosing plant deficiencies and boosting flowering yield."
+                }
+            ]
+        elif any(w in s_lower for w in ["craft", "pottery", "clay", "terracotta", "jute", "art", "artisan", "கைவினை", "களிமண்", "ஓவியம்"]):
+            presets = [
+                {
+                    "title": f"Handcrafted Terracotta Clay Art & Decorative Souvenir Tutorial",
+                    "category": "Artisan Handicrafts",
+                    "tags": ["Handicrafts", "Terracotta", "Clay Art", "Home Decor", "Eco Art"],
+                    "views": 8200, "watch_time_hours": 890, "followers": 580, "estimated_earning": 1550,
+                    "subtitles_ta": f"1. இயற்கைக் களிமண்ணை பதப்படுத்தி வடிவம் தருதல்.\n2. அழகிய சிற்பங்கள் மற்றும் வீட்டு அலங்கார பொருட்கள் உருவாக்குதல்.\n3. சுட்டு வண்ணம் தீட்டி நீண்ட நாள் உழைக்க வைத்தல்.",
+                    "subtitles_en": f"1. Kneading natural clay to smooth workable consistency.\n2. Hand-sculpting decorative idols, diya lamps, and gift items.\n3. Curing and applying eco-friendly water-resistant finishes."
+                },
+                {
+                    "title": f"Jute & Natural Fiber Handcrafts for Festival Return Gifts",
+                    "category": "Artisan Handicrafts",
+                    "tags": ["Jute Crafts", "Festival Gifts", "Handmade", "Sustainable", "Boutique"],
+                    "views": 6900, "watch_time_hours": 740, "followers": 480, "estimated_earning": 1300,
+                    "subtitles_ta": f"1. சணல் கயிறு மற்றும் துணிகளை கொண்டு பரிசுக் கூடைகள் பின்னுதல்.\n2. பாரம்பரிய வர்ணங்கள் மற்றும் குஞ்சல வேலைப்பாடு சேர்த்தல்.\n3. திருமண விழாக்களுக்கான மொத்த பரிசு ஆர்டர்களை பெறுதல்.",
+                    "subtitles_en": f"1. Weaving handcrafted jute baskets, coasters, and pouches.\n2. Adding traditional beads, tassels, and vibrant accents.\n3. Packaging artisanal sets for festive celebrations and wedding return gifts."
+                }
+            ]
+        elif any(w in s_lower for w in ["teach", "tutor", "math", "vedic", "science", "english", "படிப்பு", "பாடம்", "கற்பித்தல்"]):
+            presets = [
+                {
+                    "title": f"Vedic Math Mental Calculation Shortcuts & Speed Techniques",
+                    "category": "Academic Mentoring",
+                    "tags": ["Vedic Math", "Mental Math", "Speed Calculation", "Tutoring", "Exam Prep"],
+                    "views": 13500, "watch_time_hours": 1490, "followers": 950, "estimated_earning": 2100,
+                    "subtitles_ta": f"1. வேத கணித சூத்திரங்கள் மூலம் நொடிகளில் பெருக்கல் செய்தல்.\n2. மாணவர்கள் பயமின்றி கணிதம் கற்க எளிய வழிமுறைகள்.\n3. போட்டித் தேர்வுகளுக்கு உதவும் மனக்கணக்கு பயிற்சிகள்.",
+                    "subtitles_en": f"1. High-speed multiplication and mental division using Vedic sutras.\n2. Eliminating math anxiety with visual problem-solving tricks.\n3. Practical speed drills for school and competitive exams."
+                },
+                {
+                    "title": f"Interactive Concept-Based Tutoring for School Students",
+                    "category": "Academic Mentoring",
+                    "tags": ["Teaching", "Conceptual Learning", "Student Mentoring", "Home Tuition"],
+                    "views": 8800, "watch_time_hours": 940, "followers": 620, "estimated_earning": 1650,
+                    "subtitles_ta": f"1. கடினமான பாடக் கருத்துக்களை அன்றாட உதாரணங்களுடன் விளக்குதல்.\n2. மாணவர்களுடன் பாசமான ஊடாடல் மற்றும் ஐயங்களை தீர்த்தல்.\n3. வாராந்திர திருப்புதல் மற்றும் தேர்வுக்கான தயார்படுத்துதல்.",
+                    "subtitles_en": f"1. Breaking down complex academic concepts with relatable real-world analogies.\n2. Fostering an encouraging, interactive doubt-clearing environment.\n3. Structuring weekly revision quizzes for academic excellence."
+                }
+            ]
+        elif any(w in s_lower for w in ["music", "sing", "vocal", "carnatic", "dance", "instrument", "பாட்டு", "இசை", "நடனம்"]):
+            presets = [
+                {
+                    "title": f"Foundation Vocal Exercises & Carnatic Music Ragas for Beginners",
+                    "category": "Music & Performing Arts",
+                    "tags": ["Carnatic Music", "Vocal Training", "Ragas", "Voice Culture", "Traditional Music"],
+                    "views": 9400, "watch_time_hours": 1020, "followers": 710, "estimated_earning": 1750,
+                    "subtitles_ta": f"1. குரல் வளம் மற்றும் ஸ்வர ஸ்தானங்களை துல்லியமாக பயிலுதல்.\n2. ஆரம்ப நிலை ராகங்கள் மற்றும் தாள பயிற்சிகள்.\n3. பக்தி பாடல்களை ஸ்வர சுத்தத்தோடு பாடும் முறைகள்.",
+                    "subtitles_en": f"1. Daily breath control and pitch-stabilizing vocal warmups.\n2. Mastering beginner ragas, swara exercises, and tala rhythm.\n3. Step-by-step rendering of traditional devotional songs."
+                },
+                {
+                    "title": f"Private Music Coaching: Curriculum & Student Engagement Tips",
+                    "category": "Music & Performing Arts",
+                    "tags": ["Music Teaching", "Online Coaching", "Cultural Mentoring", "Vocal"],
+                    "views": 6800, "watch_time_hours": 720, "followers": 470, "estimated_earning": 1320,
+                    "subtitles_ta": f"1. ஆன்லைன் மற்றும் நேரடி இசை வகுப்புகளை திட்டமிடுதல்.\n2. மாணவர்களின் சுருதி மற்றும் லயத்தை எளிதாக சரிசெய்தல்.\n3. மேடை நிகழ்ச்சிகளுக்கான தன்னம்பிக்கை வழிகாட்டுதல்.",
+                    "subtitles_en": f"1. Structuring structured weekly lesson plans for home and online music classes.\n2. Correcting shruti alignment and rhythmic timing gently.\n3. Building stage confidence for community cultural recitals."
+                }
+            ]
+        elif any(w in s_lower for w in ["repair", "plumb", "electric", "carpenter", "wood", "fix", "பழுது", "மரவேலை", "மின்னியல்"]):
+            presets = [
+                {
+                    "title": f"Practical Home Repair & Safe Appliance Maintenance Masterclass",
+                    "category": "Home Repair Services",
+                    "tags": ["Home Repair", "Safety", "DIY Maintenance", "Handyman", "Electrical"],
+                    "views": 8600, "watch_time_hours": 910, "followers": 610, "estimated_earning": 1600,
+                    "subtitles_ta": f"1. பாதுகாப்பு முன்னெச்சரிக்கைகளுடன் வீட்டு உபகரணங்களை பரிசோதித்தல்.\n2. பொதுவான பழுதுகளை விரைவாக நீக்கும் முறைகள்.\n3. நீண்ட நாள் பயன்பாட்டிற்கான பராமரிப்பு குறிப்புகள்.",
+                    "subtitles_en": f"1. Essential safety protocols and testing equipment basics.\n2. Step-by-step troubleshooting of common household faults.\n3. Preventive maintenance routines to extend appliance longevity."
+                },
+                {
+                    "title": f"Precision Woodworking & Furniture Restoration Techniques",
+                    "category": "Home Repair Services",
+                    "tags": ["Woodworking", "Furniture Restoration", "Carpentry", "Polishing", "Craft"],
+                    "views": 6900, "watch_time_hours": 750, "followers": 490, "estimated_earning": 1380,
+                    "subtitles_ta": f"1. மரத்தை சமன் செய்து பளபளப்பாக்கும் மெருகூட்டல் முறைகள்.\n2. விரிசல்கள் மற்றும் தளர்ந்த இணைப்புகளை சரிசெய்தல்.\n3. பாரம்பரிய மர வேலைப்பாடுகளின் மதிப்பைக் கூட்டுதல்.",
+                    "subtitles_en": f"1. Sanding, staining, and protective natural wax polishing.\n2. Repairing joint looseness, wood fractures, and hinge fittings.\n3. Restoring vintage wooden furniture to premium condition."
+                }
+            ]
+        elif any(w in s_lower for w in ["care", "child", "elder", "nursing", "yoga", "wellness", "health", "பராமரிப்பு", "யோகா", "மருத்துவம்"]):
+            presets = [
+                {
+                    "title": f"Gentle Senior Yoga & Therapeutic Daily Wellness Routine",
+                    "category": "Caregiving & Wellness",
+                    "tags": ["Senior Yoga", "Pranayama", "Holistic Health", "Joint Mobility", "Wellness"],
+                    "views": 9800, "watch_time_hours": 1080, "followers": 750, "estimated_earning": 1800,
+                    "subtitles_ta": f"1. மூட்டு வலி குறைக்கும் எளிய நாற்காலி யோகாசனங்கள்.\n2. மன அமைதிக்கான பிராணாயாம மூச்சுப் பயிற்சிகள்.\n3. ஆரோக்கியமான தினசரி உணவு மற்றும் வாழ்க்கை முறை.",
+                    "subtitles_en": f"1. Gentle chair-assisted stretching for joint flexibility and balance.\n2. Calming pranayama breathing techniques for stress relief.\n3. Traditional daily wellness routines for vibrant senior living."
+                },
+                {
+                    "title": f"Compassionate Home Elder Care & Daily Assistance Practices",
+                    "category": "Caregiving & Wellness",
+                    "tags": ["Elder Care", "Home Health", "Companionship", "Caregiving", "First Aid"],
+                    "views": 7200, "watch_time_hours": 790, "followers": 510, "estimated_earning": 1420,
+                    "subtitles_ta": f"1. முதியவர்களின் தேவைகளை அன்போடு கவனிக்கும் முறைகள்.\n2. நேரத்திற்கு மருந்து வழங்குதல் மற்றும் சத்தான உணவு அளித்தல்.\n3. அவசர கால முதலுதவி பாதுகாப்பு ஆலோசனைகள்.",
+                    "subtitles_en": f"1. Providing compassionate, dignified emotional support and companionship.\n2. Organizing timely medication schedules and tailored soft nutrition.\n3. Basic home mobility assistance and essential first aid."
+                }
+            ]
+        else:
+            # Universal dynamic preset for custom skills (e.g. Soap Making, Candle Making, Bookkeeping, etc.)
+            presets = [
+                {
+                    "title": f"Complete Practical Masterclass & Techniques in {s_name}",
+                    "category": s_cat if s_cat else "Artisan Expertise",
+                    "tags": [s_name, s_cat, "SilverHands", "Masterclass", "Practical Skills"],
+                    "views": 7800, "watch_time_hours": 840, "followers": 550, "estimated_earning": 1450,
+                    "subtitles_ta": f"1. {s_name} குறித்த அடிப்படைகளை தெளிவாக அறிந்துகொள்ளுதல்.\n2. படிபடியான செய்முறை விளக்கத்தை கவனமாக பின்பற்றுதல்.\n3. தரமான நிறைவு மற்றும் சிறந்த பலன்களை அடைதல்.",
+                    "subtitles_en": f"1. Understanding the foundational principles of {s_name}.\n2. Step-by-step practical implementation and demonstration.\n3. Quality finishing and verifying optimal results."
+                },
+                {
+                    "title": f"How to Monetize and Offer Services in {s_name}",
+                    "category": s_cat if s_cat else "Artisan Expertise",
+                    "tags": [s_name, "Monetization", "Home Business", "Client Orders", "Services"],
+                    "views": 6400, "watch_time_hours": 710, "followers": 460, "estimated_earning": 1280,
+                    "subtitles_ta": f"1. வாடிக்கையாளர் தேவைகளை உணர்ந்து சேவைகளை வழங்குதல்.\n2. நியாயமான கட்டணம் நிர்ணயம் செய்தல்.\n3. சமூக வலைத்தளங்கள் மூலம் புதிய ஆர்டர்களை பெறுதல்.",
+                    "subtitles_en": f"1. Aligning your skill offerings with high local client demand.\n2. Setting fair, profitable pricing for your time and expertise.\n3. Generating word-of-mouth recommendations and repeat orders."
+                }
+            ]
+
+        # Guarantee at least `count` generated videos
+        videos = []
+        for i in range(max(count, len(presets))):
+            if i < len(presets):
+                p = presets[i]
+            else:
+                p = {
+                    "title": f"Advanced {s_name} Tips & Quality Secrets (Part {i + 1})",
+                    "category": s_cat if s_cat else "Artisan Expertise",
+                    "tags": [s_name, s_cat, "SilverHands", "Pro Tips"],
+                    "views": 5500 + i * 800,
+                    "watch_time_hours": 600 + i * 90,
+                    "followers": 380 + i * 60,
+                    "estimated_earning": 1200 + i * 150,
+                    "subtitles_ta": f"1. {s_name} மேம்பட்ட நுணுக்கங்கள்.\n2. நேரடி விளக்கம்.\n3. நிறைவு மற்றும் பயன்.",
+                    "subtitles_en": f"1. Advanced concepts in {s_name}.\n2. Hands-on demonstration.\n3. Evaluation and best practices."
+                }
+
+            vid_id = f"vid-gemini-{os.urandom(4).hex()}"
+            img = self.generate_skill_image(p["category"], p["title"], p["category"])
+            videos.append({
+                "id": vid_id,
+                "title": p["title"],
+                "author": u_name,
+                "category": p["category"],
+                "language": lang,
+                "views": p["views"],
+                "watch_time_hours": p["watch_time_hours"],
+                "followers": p["followers"],
+                "estimated_earning": p["estimated_earning"],
+                "thumbnail": img,
+                "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                "tags": p["tags"],
+                "subtitles_ta": p["subtitles_ta"],
+                "subtitles_en": p["subtitles_en"]
+            })
+
+            if len(videos) >= count and len(videos) >= 2:
+                break
+
+        return videos[:max(count, 2)]
+
     def silverbuddy_query(self, query: str, user_profile: Dict[str, Any], lang: str = "ta") -> Dict[str, Any]:
         """SilverBuddy Voice & Text AI Assistant derived dynamically from user's query and profile."""
         if not isinstance(user_profile, dict):

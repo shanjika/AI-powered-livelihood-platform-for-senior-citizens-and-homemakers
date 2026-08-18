@@ -50,12 +50,16 @@ window.ClassesComponent = {
 
   render() {
     const teachingSkill = this.getTeachingSkill();
+    const userName = (window.app && window.app.userProfile && window.app.userProfile.name) ? window.app.userProfile.name : "Member";
+
     return `
       <div class="animate-fade-in">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
           <div>
-            <h1 class="brand-font" style="color: var(--primary);">🎓 My Teaching & Classes</h1>
-            <p style="color: var(--text-muted);">Share your knowledge. Conduct workshops and earn income.</p>
+            <h1 class="brand-font" style="color: var(--primary);">🎓 Masterclasses for ${teachingSkill}</h1>
+            <p style="color: var(--text-muted); font-size: 1.05rem;">
+              Personalized for <strong>${userName}</strong> • Showing classes strictly matched to your verified skill in <strong>${teachingSkill}</strong>.
+            </p>
           </div>
 
           <button class="btn btn-primary" onclick="window.ClassesComponent.openClassModal('${teachingSkill.replace(/'/g, "\\'")}')">
@@ -64,8 +68,8 @@ window.ClassesComponent = {
         </div>
 
         ${this.relevantOpportunities.length ? `
-          <div style="margin: 2rem 0 1.2rem;">
-            <h3 style="color: var(--secondary); margin-bottom: 1rem;">💼 Relevant ${teachingSkill} Opportunities</h3>
+          <div style="margin: 1.5rem 0 2rem;">
+            <h3 style="color: var(--secondary); margin-bottom: 1rem;">💼 Relevant ${teachingSkill} Micro-Opportunities</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
               ${this.relevantOpportunities.map(job => `
                 <div class="card" style="padding: 1rem; border: 1px solid var(--surface-border);">
@@ -79,41 +83,55 @@ window.ClassesComponent = {
           </div>
         ` : ''}
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.8rem;">
-          ${this.classes.map(cls => `
-            <div class="card">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.8rem;">
-                <span class="badge badge-high">${cls.mode}</span>
-                <span class="badge badge-accent">Enrolled: ${cls.enrolled_count}/${cls.max_students}</span>
-              </div>
+        ${!this.classes.length ? `
+          <div class="card" style="text-align: center; padding: 3rem; margin-top: 1rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🎓</div>
+            <h3 style="color: var(--text-main);">No matching classes found yet for ${teachingSkill}</h3>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Click the button below to auto-generate an AI masterclass for your skill!</p>
+            <button class="btn btn-primary" onclick="window.ClassesComponent.openClassModal('${teachingSkill.replace(/'/g, "\\'")}')">
+              ✨ Auto-Generate ${teachingSkill} Masterclass
+            </button>
+          </div>
+        ` : `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.8rem;">
+            ${this.classes.map(cls => {
+              const curriculumArr = Array.isArray(cls.curriculum) ? cls.curriculum : (typeof cls.curriculum === 'string' ? JSON.parse(cls.curriculum || '[]') : []);
+              return `
+                <div class="card">
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.8rem;">
+                    <span class="badge badge-high">${cls.mode}</span>
+                    <span class="badge badge-accent">Enrolled: ${cls.enrolled_count}/${cls.max_students}</span>
+                  </div>
 
-              <h2>${cls.title}</h2>
-              <p style="color: var(--text-muted); font-size: 0.95rem;">Instructor: <strong>${cls.instructor}</strong></p>
+                  <h2>${cls.title}</h2>
+                  <p style="color: var(--text-muted); font-size: 0.95rem;">Instructor: <strong>${cls.instructor}</strong> • <span style="color: var(--secondary);">${cls.category}</span></p>
 
-              <div style="margin: 1rem 0; font-size: 1.5rem; font-weight: 800; color: var(--primary);">
-                ₹${cls.fee.toLocaleString()} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/ student</span>
-              </div>
+                  <div style="margin: 1rem 0; font-size: 1.5rem; font-weight: 800; color: var(--primary);">
+                    ₹${Number(cls.fee || 0).toLocaleString()} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/ student</span>
+                  </div>
 
-              <p style="color: var(--text-main); margin-bottom: 1rem;">${cls.description}</p>
+                  <p style="color: var(--text-main); margin-bottom: 1rem;">${cls.description}</p>
 
-              <div style="background: rgba(0,0,0,0.25); padding: 0.9rem; border-radius: var(--radius-sm); margin-bottom: 1.2rem;">
-                <strong style="color: var(--secondary);">Curriculum Overview:</strong>
-                <ul style="margin-left: 1.2rem; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.9rem;">
-                  ${(cls.curriculum || []).map(c => `<li>${c}</li>`).join('')}
-                </ul>
-              </div>
+                  <div style="background: rgba(0,0,0,0.25); padding: 0.9rem; border-radius: var(--radius-sm); margin-bottom: 1.2rem;">
+                    <strong style="color: var(--secondary);">Curriculum Overview:</strong>
+                    <ul style="margin-left: 1.2rem; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.9rem;">
+                      ${curriculumArr.map(c => `<li>${c}</li>`).join('')}
+                    </ul>
+                  </div>
 
-              <div style="display: flex; gap: 0.8rem;">
-                <button class="btn btn-primary" style="flex: 1;" onclick="window.ClassesComponent.bookClass('${cls.id}')">
-                  🎟️ Book Seat
-                </button>
-                <button class="btn btn-outline" onclick="alert('Class schedule copied to share!')">
-                  📢 Share Class
-                </button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
+                  <div style="display: flex; gap: 0.8rem;">
+                    <button class="btn btn-primary" style="flex: 1;" onclick="window.ClassesComponent.bookClass('${cls.id}')">
+                      🎟️ Book Seat
+                    </button>
+                    <button class="btn btn-outline" onclick="alert('Class schedule copied to share!')">
+                      📢 Share Class
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
       </div>
     `;
   },

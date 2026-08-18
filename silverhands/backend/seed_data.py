@@ -340,6 +340,45 @@ INITIAL_CLASSES = [
             "Session 5: Fraction & Percentage Shortcuts",
             "Session 6: Exam Application & Practice Tournament"
         ]
+    },
+    {
+        "id": "cls-3",
+        "title": "Traditional Handcrafts & Terracotta Pottery Art",
+        "instructor": "Kamala Natarajan",
+        "category": "Handicrafts",
+        "fee": 950,
+        "duration": "4 Sessions (Sundays)",
+        "schedule": "2:00 PM - 4:00 PM",
+        "mode": "Hands-on Studio Workshop",
+        "enrolled_count": 6,
+        "max_students": 10,
+        "description": "Create handcrafted terracotta clay items, jute festival decor, and eco-friendly artisan return gifts.",
+        "curriculum": [
+            "Session 1: Eco-Clay Preparation & Handcraft Molding",
+            "Session 2: Terracotta Painting & Traditional Motifs",
+            "Session 3: Jute Weaving & Eco-Product Crafting",
+            "Session 4: Selling Handcrafts Online & Community Stalls"
+        ]
+    },
+    {
+        "id": "cls-4",
+        "title": "Masterclass in Blouse Stitching & Embroidery",
+        "instructor": "Meenakshi Sundaram",
+        "category": "Tailoring",
+        "fee": 1100,
+        "duration": "5 Sessions (Tuesdays)",
+        "schedule": "11:00 AM - 1:00 PM",
+        "mode": "Hybrid Workshop",
+        "enrolled_count": 9,
+        "max_students": 15,
+        "description": "Step-by-step masterclass on custom blouse cutting, hand embroidery techniques, and cloth bag stitching.",
+        "curriculum": [
+            "Session 1: Body Measurement & Pattern Cutting",
+            "Session 2: Zardosi & Thread Embroidery Basics",
+            "Session 3: Machine Stitching & Fitting Adjustments",
+            "Session 4: Reusable Cloth Bag Mass Production",
+            "Session 5: Pricing Tailoring Services & Client Orders"
+        ]
     }
 ]
 
@@ -373,6 +412,36 @@ INITIAL_VIDEOS = [
         "tags": ["Embroidery", "Tailoring", "Sari Blouse", "Stitching", "Handcraft"],
         "subtitles_ta": "எளிய முறையில் ஜரிகை தையல் போடுவது எப்படி...",
         "subtitles_en": "How to stitch elegant zari embroidery easily at home..."
+    },
+    {
+        "id": "vid-3",
+        "title": "Terracotta Clay Modeling & Handcraft Gift Tutorial",
+        "author": "Kamala Natarajan",
+        "category": "Handicrafts",
+        "language": "ta",
+        "views": 6540,
+        "watch_time_hours": 710,
+        "followers": 490,
+        "estimated_earning": 1150,
+        "thumbnail": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&q=80",
+        "tags": ["Handicrafts", "Handcraft", "Terracotta", "Clay", "Eco Art"],
+        "subtitles_ta": "மண்பாண்ட கைவினை பொருட்கள் செய்யும் வழிமுறைகள்...",
+        "subtitles_en": "Step-by-step techniques to create handcrafted terracotta return gifts..."
+    },
+    {
+        "id": "vid-4",
+        "title": "Vedic Math Mental Tricks for Fast Calculation",
+        "author": "Saraswati Ramachandran",
+        "category": "Teaching",
+        "language": "ta",
+        "views": 14200,
+        "watch_time_hours": 1560,
+        "followers": 980,
+        "estimated_earning": 2200,
+        "thumbnail": "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&q=80",
+        "tags": ["Vedic Math", "Mathematics", "Tutoring", "Mental Math", "Teaching"],
+        "subtitles_ta": "வேத கணித சூத்திரங்களை எளிதாக பயன்படுத்தும் வழிகள்...",
+        "subtitles_en": "Learn fast mental math calculations using ancient Vedic math sutras..."
     }
 ]
 

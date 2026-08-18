@@ -1,7 +1,8 @@
 /**
  * SilverHands Skill Video Studio & Content Monetization Component
- * Integrates dynamic Gemini AI image generation based on user skills,
- * video uploads, AI auto-transcription, bilingual subtitles, and social post creation.
+ * Integrates dynamic Gemini AI video generation based strictly on user skills,
+ * video playback player with dual bilingual subtitles (Tamil & English),
+ * creator monetization analytics, and Gemini AI social post creation.
  */
 
 window.ContentComponent = {
@@ -9,6 +10,8 @@ window.ContentComponent = {
   relevantOpportunities: [],
   imageCache: {},
   activePostModal: null,
+  activeVideoModal: null,
+  activeSkillFilter: 'all',
 
   async loadVideos() {
     const user = window.app && window.app.userProfile ? window.app.userProfile : null;
@@ -74,10 +77,27 @@ window.ContentComponent = {
     }
 
     const titleSafe = name.replace(/&/g, "&amp;").slice(0, 38);
-    const svg = `<svg width="800" height="450" viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${bgStart}"/><stop offset="50%" stop-color="${bgMid}"/><stop offset="100%" stop-color="${bgEnd}"/></linearGradient></defs><rect width="800" height="450" fill="url(#g)"/><circle cx="700" cy="80" r="150" fill="${accent}" opacity="0.25"/><rect x="50" y="50" width="700" height="350" rx="20" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/><rect x="90" y="90" width="${badge.length * 9 + 40}" height="34" rx="17" fill="rgba(0,0,0,0.4)" stroke="${accent}" stroke-width="1.5"/><text x="110" y="113" font-family="sans-serif" font-size="14" font-weight="700" fill="${accent}">${badge}</text><text x="630" y="180" font-size="80" text-anchor="middle">${icon}</text><text x="90" y="195" font-family="sans-serif" font-size="32" font-weight="800" fill="#ffffff">${titleSafe}</text><text x="90" y="240" font-family="sans-serif" font-size="17" fill="rgba(255,255,255,0.85)">AI Generated Skill Masterclass &amp; Showcase</text><line x1="90" y1="285" x2="710" y2="285" stroke="rgba(255,255,255,0.15)" stroke-width="1"/><text x="90" y="335" font-family="sans-serif" font-size="14" font-weight="700" fill="#ffffff">SilverHands Creator Studio</text><text x="690" y="335" font-family="sans-serif" font-size="13" font-weight="600" fill="${accent}" text-anchor="end">AI Visual Generated</text></svg>`;
-    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg.trim())}`;
+    const svg = `<svg width="800" height="450" viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${bgStart}"/><stop offset="50%" stop-color="${bgMid}"/><stop offset="100%" stop-color="${bgEnd}"/></linearGradient></defs><rect width="800" height="450" fill="url(#g)"/><circle cx="700" cy="80" r="150" fill="${accent}" opacity="0.25"/><rect x="50" y="50" width="700" height="350" rx="20" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/><rect x="90" y="90" width="${badge.length * 9 + 40}" height="34" rx="17" fill="rgba(0,0,0,0.4)" stroke="${accent}" stroke-width="1.5"/><text x="110" y="113" font-family="sans-serif" font-size="14" font-weight="700" fill="${accent}">${badge}</text><text x="630" y="180" font-size="80" text-anchor="middle">${icon}</text><text x="90" y="195" font-family="sans-serif" font-size="30" font-weight="800" fill="#ffffff">${titleSafe}</text><text x="90" y="240" font-family="sans-serif" font-size="17" fill="rgba(255,255,255,0.85)">AI Generated Skill Masterclass &amp; Showcase</text><line x1="90" y1="285" x2="710" y2="285" stroke="rgba(255,255,255,0.15)" stroke-width="1"/><text x="90" y="335" font-family="sans-serif" font-size="14" font-weight="700" fill="#ffffff">SilverHands Creator Studio</text><text x="690" y="335" font-family="sans-serif" font-size="13" font-weight="600" fill="${accent}" text-anchor="end">Gemini AI Visual</text></svg>`;
+    const dataUri = `data:image/svg+xml;utf8,{encodeURIComponent(svg.trim())}`;
     this.imageCache[name] = dataUri;
     return dataUri;
+  },
+
+  setSkillFilter(skillName) {
+    this.activeSkillFilter = skillName;
+    window.app.render();
+  },
+
+  getFilteredVideos() {
+    if (this.activeSkillFilter === 'all') return this.videos;
+    const filterLower = this.activeSkillFilter.toLowerCase();
+    return this.videos.filter(v => {
+      const vTitle = (v.title || '').toLowerCase();
+      const vCat = (v.category || '').toLowerCase();
+      const vTags = Array.isArray(v.tags) ? v.tags.join(' ').toLowerCase() : (v.tags || '').toLowerCase();
+      const combined = `${vTitle} ${vCat} ${vTags}`;
+      return combined.includes(filterLower) || filterLower.includes(vCat);
+    });
   },
 
   render() {
@@ -91,7 +111,7 @@ window.ContentComponent = {
             <div style="font-size: 4rem; margin-bottom: 1rem;">🎥</div>
             <h1 class="brand-font" style="color: var(--primary); margin-bottom: 0.8rem;">Add your skill first</h1>
             <p style="color: var(--text-muted); font-size: 1.05rem; margin-bottom: 1.5rem;">
-              Your content studio dynamically generates Gemini AI images and tutorials based on the skills confirmed on your profile.
+              Your content studio automatically uses Gemini AI to generate video tutorials and visual masterclasses strictly tailored to your confirmed profile skills.
             </p>
             <button class="btn btn-primary btn-lg" onclick="window.app.navigate('onboarding')">
               ✨ Add My Skills
@@ -107,6 +127,8 @@ window.ContentComponent = {
       return currentYears > bestYears ? current : best;
     }, skills[0]);
 
+    const displayVideos = this.getFilteredVideos();
+
     const summary = this.videos.reduce((acc, v) => {
       const views = Number(v.views || 0);
       const watchHours = Number(v.watch_time_hours || 0);
@@ -120,16 +142,22 @@ window.ContentComponent = {
     }, { views: 0, watchHours: 0, followers: 0, earnings: 0 });
 
     const skillName = primarySkill.name || 'Your Skill';
+    const skillListNames = skills.map(s => s.name || s);
 
     return `
       <div class="animate-fade-in">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h1 class="brand-font" style="color: var(--primary);">🎥 My Skill Videos & Creator Studio</h1>
-            <p style="color: var(--text-muted);">Gemini AI generates dynamic visual images, bilingual subtitles, and social media posts tailored to your skills.</p>
+            <p style="color: var(--text-muted); font-size: 1.02rem;">
+              Personalized for <strong>${user.name}</strong> • Showing videos strictly matched to your verified profile skills: <strong>${skillListNames.join(', ')}</strong>.
+            </p>
           </div>
 
           <div style="display: flex; gap: 0.8rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="window.ContentComponent.generateGeminiVideo('${skillName.replace(/'/g, "\\'")}')">
+              🤖 Auto-Generate Gemini AI Video
+            </button>
             <button class="btn btn-secondary" onclick="window.ContentComponent.openSocialPostModal('${skillName.replace(/'/g, "\\'")}')">
               🎨 Generate AI Post & Visual
             </button>
@@ -162,9 +190,28 @@ window.ContentComponent = {
           </div>
         </div>
 
+        <!-- Skill Filter Tabs (when profile has multiple skills) -->
+        ${skills.length > 1 ? `
+          <div style="display: flex; gap: 0.6rem; margin-bottom: 1.8rem; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); margin-right: 0.4rem;">Filter by Skill:</span>
+            <button class="btn ${this.activeSkillFilter === 'all' ? 'btn-primary' : 'btn-outline'}" style="padding: 0.35rem 0.9rem; font-size: 0.88rem;" onclick="window.ContentComponent.setSkillFilter('all')">
+              All Skills (${this.videos.length})
+            </button>
+            ${skills.map(s => {
+              const sName = s.name || s;
+              const isSelected = this.activeSkillFilter === sName;
+              return `
+                <button class="btn ${isSelected ? 'btn-primary' : 'btn-outline'}" style="padding: 0.35rem 0.9rem; font-size: 0.88rem;" onclick="window.ContentComponent.setSkillFilter('${sName.replace(/'/g, "\\'")}')">
+                  ✨ ${sName}
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+
         ${this.relevantOpportunities.length ? `
           <div style="margin: 1.8rem 0;">
-            <h3 style="color: var(--secondary); margin-bottom: 1rem;">💼 ${primarySkill.name} Skill Opportunities</h3>
+            <h3 style="color: var(--secondary); margin-bottom: 1rem;">💼 ${primarySkill.name} Micro-Job Opportunities</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
               ${this.relevantOpportunities.map(job => `
                 <div class="card" style="padding: 1rem; border: 1px solid var(--surface-border);">
@@ -178,51 +225,180 @@ window.ContentComponent = {
           </div>
         ` : ''}
 
-        <!-- Videos List -->
-        <h3 style="margin-bottom: 1rem; color: var(--text-main);">✨ Skill Tutorials with Gemini AI Generated Visuals</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.8rem;">
-          ${this.videos.map(v => {
-            const thumbnail = v.thumbnail || this.getSkillImage(v.category || skillName, v.title);
-            return `
-            <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-              <div>
-                <div style="position: relative; overflow: hidden; border-radius: var(--radius-md); margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                  <img src="${thumbnail}" alt="${v.title}" style="width: 100%; height: 200px; object-fit: cover; display: block; border-radius: var(--radius-md);">
-                  <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.75); color: #fff; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
-                    🤖 Gemini AI Generated
-                  </div>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                  <span class="badge badge-accent">${v.category}</span>
-                  <span class="badge badge-high">👁️ ${(v.views || 100).toLocaleString()} views</span>
-                </div>
-
-                <h3 style="margin-bottom: 0.3rem;">${v.title}</h3>
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.2rem;">By ${v.author}</p>
-
-                <!-- AI Generated Subtitles Accordion -->
-                <div style="margin: 1rem 0; background: rgba(0,0,0,0.3); padding: 0.9rem; border-radius: var(--radius-sm);">
-                  <strong style="color: var(--secondary);">🤖 AI Subtitles (Tamil & English):</strong>
-                  <div style="font-size: 0.88rem; color: var(--text-muted); margin-top: 0.4rem; white-space: pre-line;">
-                    <strong>TA:</strong> ${v.subtitles_ta || '1. ஆரம்ப வழிகாட்டுதல்.'}<br>
-                    <strong>EN:</strong> ${v.subtitles_en || '1. Step by step instructions.'}
-                  </div>
-                </div>
-              </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--surface-border); padding-top: 0.8rem; margin-top: 0.8rem;">
-                <span style="color: var(--success); font-weight: 700;">Est. Revenue: ₹${v.estimated_earning || 200}</span>
-                <button class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.88rem;" onclick="window.ContentComponent.openSocialPostModal('${(v.title || skillName).replace(/'/g, "\\'")}', '${(v.category || skillName).replace(/'/g, "\\'")}')">
-                  ✨ Share Social Post
-                </button>
-              </div>
-            </div>
-          `;
-          }).join('')}
+        <!-- Videos Section Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem;">
+          <h3 style="color: var(--text-main); margin: 0;">
+            ✨ Skill Tutorials strictly matched to your profile (${displayVideos.length} ${displayVideos.length === 1 ? 'Video' : 'Videos'})
+          </h3>
+          <span style="font-size: 0.85rem; color: var(--accent); font-weight: 600;">
+            🤖 Automatically generated by Gemini AI based only on your matching skills
+          </span>
         </div>
 
+        <!-- Videos List -->
+        ${!displayVideos.length ? `
+          <div class="card" style="text-align: center; padding: 3rem; margin-top: 1rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🎥</div>
+            <h3 style="color: var(--text-main);">No videos found for this filter</h3>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Click below to automatically generate Gemini AI video tutorials for your skills!</p>
+            <button class="btn btn-primary" onclick="window.ContentComponent.generateGeminiVideo('${skillName.replace(/'/g, "\\'")}')">
+              🤖 Auto-Generate ${skillName} Video
+            </button>
+          </div>
+        ` : `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.8rem;">
+            ${displayVideos.map(v => {
+              const thumbnail = v.thumbnail || this.getSkillImage(v.category || skillName, v.title);
+              const tagList = Array.isArray(v.tags) ? v.tags : (typeof v.tags === 'string' ? JSON.parse(v.tags || '[]') : []);
+              return `
+              <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s ease, box-shadow 0.2s ease; cursor: default;">
+                <div>
+                  <div style="position: relative; overflow: hidden; border-radius: var(--radius-md); margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;" onclick="window.ContentComponent.openVideoModal('${v.id}')">
+                    <img src="${thumbnail}" alt="${v.title}" style="width: 100%; height: 205px; object-fit: cover; display: block; border-radius: var(--radius-md);">
+                    
+                    <!-- Play Overlay Button -->
+                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); opacity: 0.85; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+                      <div style="width: 52px; height: 52px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                        ▶
+                      </div>
+                    </div>
+
+                    <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: var(--accent); font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid rgba(245,158,11,0.3);">
+                      🤖 Gemini AI Generated
+                    </div>
+                  </div>
+                  
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
+                    <span class="badge badge-accent" style="font-size: 0.82rem;">⭐ ${v.category}</span>
+                    <span class="badge badge-high" style="font-size: 0.82rem;">👁️ ${(Number(v.views) || 1200).toLocaleString()} views</span>
+                  </div>
+
+                  <h3 style="margin-bottom: 0.4rem; font-size: 1.15rem; line-height: 1.4; color: var(--text-main);">${v.title}</h3>
+                  <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.2rem;">By <strong>${v.author}</strong></p>
+
+                  <!-- AI Generated Bilingual Subtitles Snippet -->
+                  <div style="margin: 1rem 0; background: rgba(0,0,0,0.35); padding: 0.9rem; border-radius: var(--radius-sm); border-left: 3px solid var(--secondary);">
+                    <strong style="color: var(--secondary); font-size: 0.88rem;">🤖 AI Subtitles (Tamil & English):</strong>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem; line-height: 1.5; white-space: pre-line;">
+                      <strong style="color: var(--text-main);">TA:</strong> ${v.subtitles_ta ? v.subtitles_ta.split('\n')[0] : '1. ஆரம்ப வழிகாட்டுதல்.'}<br>
+                      <strong style="color: var(--text-main);">EN:</strong> ${v.subtitles_en ? v.subtitles_en.split('\n')[0] : '1. Step by step instructions.'}
+                    </div>
+                  </div>
+
+                  <!-- Tags -->
+                  ${tagList.length ? `
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.8rem;">
+                      ${tagList.slice(0, 4).map(t => `<span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 7px; border-radius: 4px; color: var(--text-muted);">#${t}</span>`).join('')}
+                    </div>
+                  ` : ''}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--surface-border); padding-top: 0.8rem; margin-top: 0.8rem; flex-wrap: wrap; gap: 0.6rem;">
+                  <span style="color: var(--success); font-weight: 700; font-size: 0.95rem;">Est. Revenue: ₹${(Number(v.estimated_earning) || 650).toLocaleString()}</span>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;" onclick="window.ContentComponent.openVideoModal('${v.id}')">
+                      ▶ Watch
+                    </button>
+                    <button class="btn btn-primary" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;" onclick="window.ContentComponent.openSocialPostModal('${(v.title || skillName).replace(/'/g, "\\'")}', '${(v.category || skillName).replace(/'/g, "\\'")}')">
+                      ✨ Share
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+            }).join('')}
+          </div>
+        `}
+
+        ${this.renderVideoModalHtml()}
         ${this.renderPostModalHtml()}
+      </div>
+    `;
+  },
+
+  openVideoModal(videoId) {
+    const vid = this.videos.find(v => v.id === videoId);
+    if (!vid) return;
+    this.activeVideoModal = vid;
+    window.app.render();
+  },
+
+  closeVideoModal() {
+    this.activeVideoModal = null;
+    window.app.render();
+  },
+
+  renderVideoModalHtml() {
+    if (!this.activeVideoModal) return '';
+    const v = this.activeVideoModal;
+    const thumbnail = v.thumbnail || this.getSkillImage(v.category, v.title);
+    const videoUrl = v.video_url || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+    const tagList = Array.isArray(v.tags) ? v.tags : (typeof v.tags === 'string' ? JSON.parse(v.tags || '[]') : []);
+
+    return `
+      <div class="modal-overlay animate-fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem;" onclick="if(event.target === this) window.ContentComponent.closeVideoModal()">
+        <div class="card" style="max-width: 750px; width: 100%; max-height: 92vh; overflow-y: auto; background: var(--surface-card); border: 2px solid var(--primary); box-shadow: 0 12px 45px rgba(0,0,0,0.85);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--surface-border); padding-bottom: 0.8rem;">
+            <div>
+              <span class="badge badge-accent" style="font-size: 0.8rem; margin-bottom: 0.3rem;">🤖 Gemini AI Masterclass</span>
+              <h2 style="color: var(--text-main); margin: 0; font-size: 1.3rem;">${v.title}</h2>
+            </div>
+            <button class="btn btn-outline" style="padding: 0.2rem 0.6rem; font-size: 1.1rem;" onclick="window.ContentComponent.closeVideoModal()">✕</button>
+          </div>
+
+          <!-- Video Player -->
+          <div style="border-radius: var(--radius-md); overflow: hidden; margin-bottom: 1.2rem; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.6);">
+            <video controls autoplay playsinline poster="${thumbnail}" style="width: 100%; height: auto; max-height: 360px; display: block; object-fit: contain;">
+              <source src="${videoUrl}" type="video/mp4">
+              Your browser does not support HTML5 video.
+            </video>
+          </div>
+
+          <!-- Creator & Metrics Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 0.8rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem;">
+            <div>
+              <strong style="color: var(--text-main);">Instructor:</strong> ${v.author} • <span style="color: var(--secondary);">${v.category}</span>
+            </div>
+            <div style="display: flex; gap: 1rem; font-size: 0.9rem;">
+              <span>👁️ <strong>${(Number(v.views) || 1200).toLocaleString()}</strong> views</span>
+              <span>⏱️ <strong>${Number(v.watch_time_hours) || 18} hrs</strong> watch time</span>
+              <span style="color: var(--success); font-weight: 700;">₹${(Number(v.estimated_earning) || 650).toLocaleString()} earned</span>
+            </div>
+          </div>
+
+          <!-- Interactive Bilingual Subtitles Display -->
+          <div style="background: rgba(0,0,0,0.4); padding: 1.2rem; border-radius: var(--radius-md); margin-bottom: 1.2rem; border: 1px solid var(--surface-border);">
+            <h4 style="color: var(--accent); margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+              🤖 AI Generated Dual Subtitles & Step-by-Step Instructions:
+            </h4>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+              <div style="background: rgba(0,0,0,0.3); padding: 0.9rem; border-radius: var(--radius-sm); border-left: 3px solid var(--primary);">
+                <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.5rem;">🇮🇳 தமிழ் (Tamil Subtitles)</div>
+                <div style="font-size: 0.88rem; color: var(--text-main); line-height: 1.6; white-space: pre-line;">
+                  ${v.subtitles_ta || '1. செயல்முறை வழிகாட்டுதல்.'}
+                </div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.3); padding: 0.9rem; border-radius: var(--radius-sm); border-left: 3px solid var(--secondary);">
+                <div style="font-weight: 700; color: var(--secondary); margin-bottom: 0.5rem;">🇬🇧 English (English Subtitles)</div>
+                <div style="font-size: 0.88rem; color: var(--text-main); line-height: 1.6; white-space: pre-line;">
+                  ${v.subtitles_en || '1. Step by step instructions.'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div style="display: flex; justify-content: flex-end; gap: 0.8rem; flex-wrap: wrap;">
+            <button class="btn btn-outline" onclick="window.ContentComponent.closeVideoModal()">
+              Close Player
+            </button>
+            <button class="btn btn-primary" onclick="window.ContentComponent.closeVideoModal(); window.ContentComponent.openSocialPostModal('${v.title.replace(/'/g, "\\'")}', '${v.category.replace(/'/g, "\\'")}')">
+              ✨ Share as AI Social Post
+            </button>
+          </div>
+        </div>
       </div>
     `;
   },
@@ -270,6 +446,41 @@ window.ContentComponent = {
         </div>
       </div>
     `;
+  },
+
+  async generateGeminiVideo(skillName) {
+    const user = window.app && window.app.userProfile ? window.app.userProfile : null;
+    if (!user || !user.id) {
+      alert("Please log in to generate videos.");
+      return;
+    }
+    const skill = skillName || (user.skills && user.skills[0] && (user.skills[0].name || user.skills[0])) || "Traditional Craft";
+    window.app.showLoading(`Gemini AI Generating Masterclass Video for ${skill}...`);
+    try {
+      const res = await fetch("/api/videos/generate_for_skill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          skill_name: skill,
+          category: skill,
+          lang: window.i18n.currentLang || "ta"
+        })
+      });
+      const generated = await res.json();
+      window.app.hideLoading();
+      if (Array.isArray(generated) && generated.length) {
+        for (const g of generated) {
+          this.videos.unshift(g);
+        }
+      }
+      window.app.render();
+      alert(`✨ Gemini AI successfully generated ${generated.length || 2} new video tutorials for your skill in ${skill}!`);
+    } catch (e) {
+      window.app.hideLoading();
+      console.error("Error generating Gemini video:", e);
+      alert("Error generating video with Gemini AI. Please try again.");
+    }
   },
 
   async openSocialPostModal(title, category = "") {

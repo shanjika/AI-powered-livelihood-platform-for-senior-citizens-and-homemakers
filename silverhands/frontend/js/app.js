@@ -52,13 +52,16 @@ class SilverHandsApp {
       if (res.ok) {
         this.userProfile = await res.json();
         localStorage.setItem("silverhands_user_id", this.userProfile.id);
+        if (window.ClassesComponent) {
+          await window.ClassesComponent.loadClasses();
+        }
       }
     } catch (e) {
       console.warn("Failed to load user profile:", e);
     }
   }
 
-  navigate(viewName) {
+  async navigate(viewName) {
     if (!this.userProfile && viewName !== "auth") {
       this.currentView = "auth";
       this.render();
@@ -68,6 +71,12 @@ class SilverHandsApp {
       this.navigationHistory.push(this.currentView);
     }
     this.currentView = viewName;
+    if (viewName === "classes" && window.ClassesComponent) {
+      await window.ClassesComponent.loadClasses();
+    }
+    if (viewName === "earnings" && window.EarningsComponent) {
+      await window.EarningsComponent.loadEarnings();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
   }

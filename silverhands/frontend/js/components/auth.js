@@ -186,6 +186,9 @@ window.AuthComponent = {
           if (window.RadarComponent) {
             await window.RadarComponent.loadOpportunities();
           }
+          if (window.ClassesComponent) {
+            await window.ClassesComponent.loadClasses();
+          }
 
           if (Array.isArray(data.user.skills) && data.user.skills.length > 0) {
             window.app.navigate("dashboard");
