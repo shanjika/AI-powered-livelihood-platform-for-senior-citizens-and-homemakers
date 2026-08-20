@@ -12,6 +12,7 @@ class AudioEngine {
     this.voiceSpeed = parseFloat(localStorage.getItem("silverhands_voice_speed") || "1.0");
     this.canvasAnimId = null;
     this.fallbackTimer = null;
+    this.sessionTranscript = "";
     this.initSpeechRecognition();
   }
 
@@ -20,8 +21,9 @@ class AudioEngine {
     if (!SpeechRecognition) return;
 
     this.recognition = new SpeechRecognition();
-    this.recognition.continuous = false;
+    this.recognition.continuous = true;
     this.recognition.interimResults = true;
+    this.recognition.maxAlternatives = 3;
 
     this.recognition.onstart = () => {
       this.isListening = true;
@@ -31,16 +33,18 @@ class AudioEngine {
     };
 
     this.recognition.onresult = (event) => {
-      let transcript = "";
-      let isFinal = false;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      let finalTranscript = "";
+      let interimTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
-        transcript += result[0].transcript;
-        if (result.isFinal) isFinal = true;
+        const text = result[0].transcript.trim();
+        if (result.isFinal) finalTranscript += `${text} `;
+        else interimTranscript += `${text} `;
       }
-      if (isFinal) {
-        document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript, isFinal: true } }));
-      }
+      this.sessionTranscript = finalTranscript.trim();
+      document.dispatchEvent(new CustomEvent("speechInterim", {
+        detail: { transcript: `${this.sessionTranscript} ${interimTranscript}`.trim(), isFinal: false }
+      }));
     };
 
     this.recognition.onend = () => {
@@ -48,6 +52,11 @@ class AudioEngine {
       this.stopWaveform();
       const btn = document.getElementById("mic-btn");
       if (btn) btn.innerHTML = "🎙️ Start Speaking";
+      if (this.sessionTranscript) {
+        document.dispatchEvent(new CustomEvent("speechResult", {
+          detail: { transcript: this.sessionTranscript, isFinal: true }
+        }));
+      }
       document.dispatchEvent(new CustomEvent("speechEnd"));
     };
 
@@ -80,59 +89,13 @@ class AudioEngine {
           this.stopListening();
           return;
         }
+        this.sessionTranscript = "";
         this.recognition.lang = langMap[langCode] || "ta-IN";
         this.recognition.start();
         return;
       } catch (e) {
         console.warn("Recognition start exception:", e);
       }
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      this.recognition = new SpeechRecognition();
-      this.recognition.continuous = false;
-      this.recognition.interimResults = true;
-      this.recognition.lang = langMap[langCode] || "ta-IN";
-      this.recognition.onstart = () => {
-        this.isListening = true;
-        document.dispatchEvent(new CustomEvent("speechStart"));
-        const btn = document.getElementById("mic-btn");
-        if (btn) btn.innerHTML = "⏹️ Stop Recording";
-      };
-      this.recognition.onresult = (event) => {
-        let transcript = "";
-        let isFinal = false;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          transcript += result[0].transcript;
-          if (result.isFinal) isFinal = true;
-        }
-        if (isFinal) {
-          document.dispatchEvent(new CustomEvent("speechResult", { detail: { transcript, isFinal: true } }));
-        }
-      };
-      this.recognition.onend = () => {
-        this.isListening = false;
-        this.stopWaveform();
-        const btn = document.getElementById("mic-btn");
-        if (btn) btn.innerHTML = "🎙️ Start Speaking";
-        document.dispatchEvent(new CustomEvent("speechEnd"));
-      };
-      this.recognition.onerror = (err) => {
-        console.warn("Speech recognition error:", err);
-        this.isListening = false;
-        this.stopWaveform();
-        const btn = document.getElementById("mic-btn");
-        if (btn) btn.innerHTML = "🎙️ Start Speaking";
-        document.dispatchEvent(new CustomEvent("speechEnd"));
-      };
-      try {
-        this.recognition.start();
-      } catch (e) {
-        console.warn("Recognition start exception:", e);
-      }
-      return;
     }
 
     this.isListening = true;
@@ -151,9 +114,6 @@ class AudioEngine {
   }
 
   stopListening() {
-    this.isListening = false;
-    this.stopWaveform();
-
     if (this.fallbackTimer) {
       clearTimeout(this.fallbackTimer);
       this.fallbackTimer = null;
@@ -165,16 +125,7 @@ class AudioEngine {
       } catch (e) {
         console.warn("Recognition stop exception:", e);
       }
-      try {
-        this.recognition.abort();
-      } catch (e) {
-        console.warn("Recognition abort exception:", e);
-      }
     }
-
-    const btn = document.getElementById("mic-btn");
-    if (btn) btn.innerHTML = "🎙️ Start Speaking";
-    document.dispatchEvent(new CustomEvent("speechEnd"));
   }
 
   speak(text, langCode = "ta") {

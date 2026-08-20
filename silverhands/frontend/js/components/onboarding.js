@@ -342,6 +342,14 @@ window.OnboardingComponent = {
 };
 
 // Listen to STT recognition results
+document.addEventListener("speechInterim", (e) => {
+  const transcript = e.detail && e.detail.transcript ? e.detail.transcript : "";
+  const input = document.getElementById("user-input");
+  if (transcript && input && !input.value.trim()) {
+    input.value = transcript;
+  }
+});
+
 document.addEventListener("speechResult", (e) => {
   if (e.detail && e.detail.transcript && e.detail.isFinal) {
     window.OnboardingComponent.sendAnswer(e.detail.transcript);
