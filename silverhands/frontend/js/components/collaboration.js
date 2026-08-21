@@ -20,30 +20,36 @@ window.CollaborationComponent = {
   render() {
     return `
       <div class="animate-fade-in">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h1 class="brand-font" style="color: var(--primary);">🤝 Collaboration Hub</h1>
-            <p style="color: var(--text-muted);">Form teams, accept community project shares, and earn together.</p>
+            <p style="color: var(--text-muted);">Form teams, accept community project shares, and earn together in your domain.</p>
           </div>
 
-          <button class="btn btn-primary" onclick="window.CollaborationComponent.openAICollaborationModal('opp-fest-500')">
+          <button class="btn btn-primary" onclick="window.CollaborationComponent.openAICollaborationModal()">
             🤖 Create AI Team Project
           </button>
         </div>
 
         <!-- Active Collaborations Grid -->
         <div style="display: flex; flex-direction: column; gap: 2rem;">
-          ${this.activeCollaborations.map(c => `
+          ${(!this.activeCollaborations || this.activeCollaborations.length === 0) ? `
+            <div class="card" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+              <div style="font-size: 3rem; margin-bottom: 0.8rem;">🤝</div>
+              <h2 style="color: var(--secondary); margin-bottom: 0.5rem;">No Active Team Collaborations Yet</h2>
+              <p>Click <strong>Create AI Team Project</strong> to automatically assemble a matched collaboration team for your skills.</p>
+            </div>
+          ` : this.activeCollaborations.map(c => `
             <div class="card" style="border: 2px solid var(--secondary);">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--surface-border); padding-bottom: 1rem;">
                 <div>
                   <span class="badge badge-accent" style="margin-bottom: 0.4rem;">Status: ${c.status}</span>
                   <h2>${c.project_name}</h2>
-                  <p style="color: var(--text-muted);">Total Project Value: <strong>₹${c.total_value.toLocaleString()}</strong> • Target: <strong>${c.target_capacity} ${c.unit_type}</strong></p>
+                  <p style="color: var(--text-muted);">Total Project Value: <strong>₹${(c.total_value || 0).toLocaleString()}</strong> • Target: <strong>${c.target_capacity} ${c.unit_type || 'Members'}</strong></p>
                 </div>
 
                 <div style="text-align: right; background: rgba(13, 148, 136, 0.15); padding: 0.8rem 1.4rem; border-radius: var(--radius-md); border: 1px solid var(--secondary);">
-                  <div style="font-size: 1.6rem; font-weight: 800; color: var(--secondary);">₹${c.my_share.toLocaleString()}</div>
+                  <div style="font-size: 1.6rem; font-weight: 800; color: var(--secondary);">₹${(c.my_share || 0).toLocaleString()}</div>
                   <div style="font-size: 0.85rem; color: var(--text-muted);">Your Expected Earning</div>
                 </div>
               </div>
@@ -80,16 +86,40 @@ window.CollaborationComponent = {
 
   async openAICollaborationModal(oppId) {
     window.app.showLoading("AI Collaboration Engine Analyzing Skills, Distances & Team Capacity...");
-    const res = await fetch("/api/collaborations/recommend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ opportunity_id: oppId })
-    });
-    const rec = await res.json();
-    window.app.hideLoading();
+    const userId = window.app.userProfile ? window.app.userProfile.id : "";
+    const skills = window.app.userProfile && window.app.userProfile.skills ? window.app.userProfile.skills : [];
+    const primarySkill = skills.length > 0 ? skills[0].name : "";
 
-    this.activeCollaborations.unshift(rec);
-    window.app.render();
-    alert("✨ AI Team Assembled! 5 matching SilverHands members recommended based on skills and location.");
+    const payload = {
+      user_id: userId,
+      skill_name: primarySkill
+    };
+    if (oppId) {
+      payload.opportunity_id = oppId;
+    }
+
+    try {
+      const res = await fetch("/api/collaborations/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const rec = await res.json();
+      window.app.hideLoading();
+
+      if (rec && rec.project_name) {
+        const existingIdx = this.activeCollaborations.findIndex(c => c.project_name === rec.project_name || (rec.opportunity_id && c.opportunity_id === rec.opportunity_id));
+        if (existingIdx >= 0) {
+          this.activeCollaborations[existingIdx] = rec;
+        } else {
+          this.activeCollaborations.unshift(rec);
+        }
+        window.app.render();
+        alert(`✨ AI Team Assembled for ${rec.project_name}! Matching SilverHands members recommended based on skills and location.`);
+      }
+    } catch (e) {
+      window.app.hideLoading();
+      console.warn("Error recommending collaboration:", e);
+    }
   }
 };

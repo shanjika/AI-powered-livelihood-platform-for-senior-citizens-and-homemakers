@@ -15,11 +15,11 @@ import json
 try:
     from .database import get_db, init_db, haversine_distance
     from .ai_engine import ai_service
-    from .opportunity_matcher import calculate_match_score, recommend_collaboration_team
+    from .opportunity_matcher import calculate_match_score, recommend_collaboration_team, is_skill_domain_match
 except ImportError:  # pragma: no cover - fallback when started directly
     from database import get_db, init_db, haversine_distance
     from ai_engine import ai_service
-    from opportunity_matcher import calculate_match_score, recommend_collaboration_team
+    from opportunity_matcher import calculate_match_score, recommend_collaboration_team, is_skill_domain_match
 
 app = FastAPI(
     title="SilverHands API Ecosystem",
@@ -129,6 +129,12 @@ class ImageGenerateRequest(BaseModel):
     skill_name: str
     topic: Optional[str] = ""
     category: Optional[str] = ""
+
+class CollabRecommendRequest(BaseModel):
+    opportunity_id: Optional[str] = None
+    user_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    target_capacity: Optional[int] = 3
 
 class SilverBuddyRequest(BaseModel):
     query: str
@@ -438,30 +444,90 @@ def match_opportunities(user_id: str):
 def get_collaborations(user_id: Optional[str] = Query(None)):
     if user_id:
         user = get_user(user_id)
-        skills = user.get("skills") or []
-        if not skills:
-            return []
-        
-        # Use ONLY primary skill (highest experience)
-        primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
-        if primary_skill and primary_skill.get("name"):
-            skill_name = primary_skill.get("name")
+        if user:
+            skills = user.get("skills") or []
+            if not skills:
+                return []
+            
+            # Primary skill
+            primary_skill = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
+            skill_name = primary_skill.get("name", "")
+            skill_cat = primary_skill.get("category", "")
             user_name = user.get("name", "Community Member")
             location = user.get("location_name") or user.get("district") or "Chennai"
-            # Return only the first collaboration (primary skill only)
+
+            # Check DB for matching collaborations
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM collaborations")
+            db_collabs = cursor.fetchall()
+            conn.close()
+
+            matched_collabs = []
+            for col in db_collabs:
+                c_dict = dict(col)
+                if isinstance(c_dict.get("members"), str):
+                    try:
+                        c_dict["members"] = json.loads(c_dict["members"])
+                    except Exception:
+                        c_dict["members"] = []
+                
+                comb_text = f"{c_dict.get('project_name', '')} {c_dict.get('opportunity_id', '')} " + " ".join([m.get("role", "") for m in c_dict.get("members", [])])
+                if is_skill_domain_match(comb_text, skill_name, skill_cat):
+                    members = c_dict.get("members", [])
+                    if members and user_name:
+                        members[0]["name"] = f"{user_name} (You)" if "You" not in members[0]["name"] else members[0]["name"]
+                        members[0]["user_id"] = user.get("id")
+                        if user.get("avatar_url"):
+                            members[0]["avatar"] = user.get("avatar_url")
+                    matched_collabs.append(c_dict)
+
+            if matched_collabs:
+                return matched_collabs
+
+            # If no matching DB collaboration, generate AI collaborations strictly for user's skill
             collabs = ai_service.generate_skill_collaborations(user_name, skill_name, location)
-            return collabs[:1] if collabs else []
+            return collabs if collabs else []
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM collaborations")
-    collabs = cursor.fetchall()
+    raw_collabs = cursor.fetchall()
     conn.close()
+
+    collabs = []
+    for col in raw_collabs:
+        c_dict = dict(col)
+        if isinstance(c_dict.get("members"), str):
+            try:
+                c_dict["members"] = json.loads(c_dict["members"])
+            except Exception:
+                c_dict["members"] = []
+        collabs.append(c_dict)
     return collabs
 
 @app.post("/api/collaborations/recommend")
-def recommend_collaboration(opportunity_id: str = Body(..., embed=True)):
-    return recommend_collaboration_team(opportunity_id)
+def recommend_collaboration(req: Optional[CollabRecommendRequest] = None, opportunity_id: Optional[str] = Body(None, embed=True)):
+    opp_id = (req.opportunity_id if req else None) or opportunity_id
+    user_id = req.user_id if req else None
+    skill_name = req.skill_name if req else None
+    target_capacity = (req.target_capacity if req else None) or 3
+
+    user = None
+    if user_id:
+        user = get_user(user_id)
+        if user and not skill_name:
+            skills = user.get("skills") or []
+            if skills:
+                primary = max(skills, key=lambda s: int(s.get("experience_years", 0) or 0))
+                skill_name = primary.get("name")
+
+    return recommend_collaboration_team(
+        opportunity_id=opp_id,
+        target_capacity=target_capacity,
+        user=user,
+        skill_name=skill_name
+    )
 
 # Classes & Booking
 # Classes & Booking

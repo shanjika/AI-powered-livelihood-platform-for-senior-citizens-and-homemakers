@@ -297,6 +297,36 @@ INITIAL_COLLABORATIONS = [
             {"user_id": "u-kamala-59", "name": "Kamala Natarajan", "role": "Cooking (Savory Snacks)", "capacity": 100, "share": 5000, "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"},
             {"user_id": "u-radha-62", "name": "Radha Venkataraman", "role": "Event Setup & Delivery", "capacity": 100, "share": 5000, "avatar": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=300&q=80"}
         ]
+    },
+    {
+        "id": "collab-diya-team",
+        "project_name": "100 Hand-Painted Terracotta Diya Sets Team",
+        "opportunity_id": "opp-corp-diya",
+        "total_value": 20000,
+        "my_share": 6666,
+        "status": "Confirmed",
+        "target_capacity": 100,
+        "unit_type": "Sets",
+        "members": [
+            {"user_id": "u-kamala-59", "name": "Kamala Natarajan", "role": "Lead Clay & Painting Artist", "capacity": 35, "share": 7000, "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"},
+            {"user_id": "u-saranya-32", "name": "Saranya Devi", "role": "Terracotta Crafting & Glazing", "capacity": 35, "share": 7000, "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80"},
+            {"user_id": "u-radha-62", "name": "Radha Venkataraman", "role": "Packaging & Safe Delivery", "capacity": 30, "share": 6000, "avatar": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=300&q=80"}
+        ]
+    },
+    {
+        "id": "collab-tailor-team",
+        "project_name": "Bridal Blouse Zari & Aari Embroidery Collective",
+        "opportunity_id": "opp-wed-sari",
+        "total_value": 22500,
+        "my_share": 7500,
+        "status": "Confirmed",
+        "target_capacity": 15,
+        "unit_type": "Garments",
+        "members": [
+            {"user_id": "u-meenakshi-61", "name": "Meenakshi Sundaram", "role": "Lead Zari & Aari Specialist", "capacity": 5, "share": 7500, "avatar": "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=300&q=80"},
+            {"user_id": "u-saraswati-67", "name": "Saraswati Ramachandran", "role": "Pattern Cutting & Finishing", "capacity": 5, "share": 7500, "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80"},
+            {"user_id": "u-radha-62", "name": "Radha Venkataraman", "role": "Measurement & Quality Assurance", "capacity": 5, "share": 7500, "avatar": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=300&q=80"}
+        ]
     }
 ]
 

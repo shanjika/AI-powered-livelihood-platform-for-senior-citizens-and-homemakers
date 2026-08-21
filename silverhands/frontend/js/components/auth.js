@@ -189,6 +189,9 @@ window.AuthComponent = {
           if (window.ClassesComponent) {
             await window.ClassesComponent.loadClasses();
           }
+          if (window.CollaborationComponent) {
+            await window.CollaborationComponent.loadCollaborations();
+          }
 
           if (Array.isArray(data.user.skills) && data.user.skills.length > 0) {
             window.app.navigate("dashboard");

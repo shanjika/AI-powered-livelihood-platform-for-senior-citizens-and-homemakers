@@ -103,8 +103,8 @@ window.RadarComponent = {
             <div style="background: rgba(0,0,0,0.25); padding: 0.9rem; border-radius: var(--radius-sm); margin-bottom: 1.2rem;">
               <strong style="color: var(--secondary);">Why you match:</strong>
               <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.4rem; color: var(--text-muted);">
-                <span>✓ 25+ years cooking experience</span>
-                <span>✓ Traditional food expertise</span>
+                <span>✓ ${(window.app.userProfile && window.app.userProfile.skills && window.app.userProfile.skills[0] && window.app.userProfile.skills[0].experience_years) || '10'}+ years ${(window.app.userProfile && window.app.userProfile.skills && window.app.userProfile.skills[0] && window.app.userProfile.skills[0].name) || opp.category} experience</span>
+                <span>✓ ${opp.category || 'Specialized'} domain expertise</span>
                 <span>✓ Available on ${opp.date}</span>
                 <span>✓ Located nearby (${opp.distance_km} km)</span>
               </div>

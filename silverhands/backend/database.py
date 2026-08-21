@@ -268,6 +268,16 @@ def init_db():
         except Exception:
             pass
 
+        # Ensure all seed collaborations exist in database
+        for col in INITIAL_COLLABORATIONS:
+            col_copy = dict(col)
+            col_copy["members"] = json.dumps(col_copy.get("members", []))
+            cursor.execute("""
+            INSERT OR REPLACE INTO collaborations (id, project_name, opportunity_id, total_value, my_share, status, target_capacity, unit_type, members)
+            VALUES (:id, :project_name, :opportunity_id, :total_value, :my_share, :status, :target_capacity, :unit_type, :members)
+            """, col_copy)
+        conn.commit()
+
     conn.close()
 
 def seed_database(conn):
